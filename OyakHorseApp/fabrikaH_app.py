@@ -121,8 +121,9 @@ def pivot_tablo_olustur(veriler, index_col):
     piv = df_concat.pivot_table(index=index_col, columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
     piv = piv.reindex(columns=[col for col in aylar_sirali if col in piv.columns])
     
-    # Sol üstteki 'Ay' başlığını kaldıran satır:
+    # Sol üstteki sütun grubunun adını temizle ve index adına orijinal sütun adını ver (Böylece 'Ay' yazısı yerine 'Kalem' vb. gelir)
     piv.columns.name = None
+    piv.index.name = index_col
     
     ay_listesi = list(piv.columns)
     trendler, yorumlar = [], []
@@ -220,6 +221,7 @@ if masse_list or cc_list or fip_list:
                 )
                 piv_cc_nature = piv_cc_nature.reindex(columns=[col for col in aylar_sirali_cc if col in piv_cc_nature.columns])
                 piv_cc_nature.columns.name = None
+                piv_cc_nature.index.name = 'Nature'
                 
                 ay_listesi_cc = list(piv_cc_nature.columns)
                 t_list, y_list = [], []
@@ -267,6 +269,7 @@ if masse_list or cc_list or fip_list:
                 )
                 piv_fip_cc = piv_fip_cc.reindex(columns=[col for col in aylar_sirali if col in piv_fip_cc.columns])
                 piv_fip_cc.columns.name = None
+                piv_fip_cc.index.name = 'Masraf_Kalemi'
                 
                 numeric_cols_fip = piv_fip_cc.select_dtypes(include='number').columns
                 piv_fip_cc.loc['TOPLAM'] = 0
@@ -301,6 +304,7 @@ if masse_list or cc_list or fip_list:
                 )
                 piv_grup_detay = piv_grup_detay.reindex(columns=[col for col in aylar_sirali_grup if col in piv_grup_detay.columns])
                 piv_grup_detay.columns.name = None
+                piv_grup_detay.index.name = 'Masraf_Kalemi'
                 
                 ay_listesi_g = list(piv_grup_detay.columns)
                 tg_list, yg_list = [], []
