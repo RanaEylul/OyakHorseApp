@@ -121,6 +121,9 @@ def pivot_tablo_olustur(veriler, index_col):
     piv = df_concat.pivot_table(index=index_col, columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
     piv = piv.reindex(columns=[col for col in aylar_sirali if col in piv.columns])
     
+    # Sol üstteki 'Ay' başlığını kaldıran satır:
+    piv.columns.name = None
+    
     ay_listesi = list(piv.columns)
     trendler, yorumlar = [], []
     for _, row in piv.iterrows():
@@ -216,6 +219,7 @@ if masse_list or cc_list or fip_list:
                     index='Nature', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
                 )
                 piv_cc_nature = piv_cc_nature.reindex(columns=[col for col in aylar_sirali_cc if col in piv_cc_nature.columns])
+                piv_cc_nature.columns.name = None
                 
                 ay_listesi_cc = list(piv_cc_nature.columns)
                 t_list, y_list = [], []
@@ -262,6 +266,7 @@ if masse_list or cc_list or fip_list:
                     index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
                 )
                 piv_fip_cc = piv_fip_cc.reindex(columns=[col for col in aylar_sirali if col in piv_fip_cc.columns])
+                piv_fip_cc.columns.name = None
                 
                 numeric_cols_fip = piv_fip_cc.select_dtypes(include='number').columns
                 piv_fip_cc.loc['TOPLAM'] = 0
@@ -295,6 +300,7 @@ if masse_list or cc_list or fip_list:
                     index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
                 )
                 piv_grup_detay = piv_grup_detay.reindex(columns=[col for col in aylar_sirali_grup if col in piv_grup_detay.columns])
+                piv_grup_detay.columns.name = None
                 
                 ay_listesi_g = list(piv_grup_detay.columns)
                 tg_list, yg_list = [], []
@@ -337,7 +343,6 @@ if masse_list or cc_list or fip_list:
                     title="Alt Masraf Kalemleri Dağılım Grafiği (K€)"
                 )
                 st.plotly_chart(fig_f, width="stretch")
-
 
 else:
     st.info("💡 Karşılaştırma tabloları ve trend grafiklerinin oluşması için sol panelden aylık Excel dosyalarınızı yükleyin.")
