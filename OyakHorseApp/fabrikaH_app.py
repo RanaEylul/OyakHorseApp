@@ -88,23 +88,28 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
 
 def trend_ve_yorum_uret(row, ay_kolonlari):
     if len(ay_kolonlari) < 2:
-        return "🟡 Veri Yetersiz", "Yetersiz Ay"
+        return '<span style="color: #ffc107; font-weight: bold;">➔ Veri Yetersiz</span>', "Yetersiz Ay"
     
     son_ay = row[ay_kolonlari[-1]]
     onceki_ay = row[ay_kolonlari[-2]]
     
     if son_ay > 50:
-        return "🔴 Yüksek Risk / Bütçe Aşımı", "Maliyetler bütçenin oldukça üzerine çıktı."
+        return '<span style="color: #dc3545; font-weight: bold;">▼ Yüksek Risk / Bütçe Aşımı</span>', "Maliyetler bütçenin oldukça üzerine çıktı."
     elif son_ay < -50:
-        return "🟢 Güçlü Tasarruf", "Ciddi oranda olumlu sapma / tasarruf sağlandı."
+        return '<span style="color: #28a745; font-weight: bold;">▲ Güçlü Tasarruf</span>', "Ciddi oranda olumlu sapma / tasarruf sağlandı."
     elif son_ay < onceki_ay and son_ay < 0:
-        return "🟢 İyileşme Eğilimi", "Tasarruf miktarı artıyor, performans olumlu."
+        return '<span style="color: #28a745; font-weight: bold;">▲ İyileşme Eğilimi</span>', "Tasarruf miktarı artıyor, performans olumlu."
     elif son_ay > onceki_ay and son_ay > 0:
-        return "🔴 Maliyet Artışı", "Harcamalarda olumsuz yönde artış var."
+        return '<span style="color: #dc3545; font-weight: bold;">▼ Maliyet Artışı</span>', "Harcamalarda olumsuz yönde artış var."
     elif abs(son_ay - onceki_ay) < 10:
-        return "🟡 Kontrol Altında", "Stabil bir maliyet seyri izleniyor."
+        return '<span style="color: #ffc107; font-weight: bold;">➔ Kontrol Altında</span>', "Stabil bir maliyet seyri izleniyor."
     else:
-        return "🟠 Takip Edilmeli", "Dönemsel dalgalanma gözleniyor."
+        return '<span style="color: #ffc107; font-weight: bold;">➔ Takip Edilmeli</span>', "Dönemsel dalgalanma gözleniyor."
+
+def formatli_tablo_goster(piv_df):
+    format_dict = {col: "{:+,.1f}" for col in piv_df.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}
+    styled = piv_df.style.format(format_dict)
+    st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
 
 def pivot_tablo_olustur(veriler, index_col):
     if not veriler:
@@ -131,7 +136,6 @@ def pivot_tablo_olustur(veriler, index_col):
     for col in numeric_cols:
         piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
     
-    # TOPLAM satırı için de akıllı yorum üretme
     toplam_row = piv.loc['TOPLAM']
     top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
     piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
@@ -176,10 +180,8 @@ if masse_list or cc_list or fip_list:
     with tab1:
         if piv_m is not None:
             st.subheader("Ana Kalemler Performans Özeti (K€)")
-            st.dataframe(
-                piv_m.style.format({col: "{:+,.1f}" for col in piv_m.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
-                width="stretch"
-            )
+            formatli_tablo_goster(piv_m)
+            
             df_m_chart = df_m_all.sort_values('Ay_Sira')
             fig_m = px.line(
                 df_m_chart, x='Ay', y='Performance', color='Kalem', markers=True,
@@ -190,10 +192,7 @@ if masse_list or cc_list or fip_list:
     with tab2:
         if piv_c is not None:
             st.subheader("🏢 Cost Center (Masraf Yeri) Yönetici Özeti")
-            st.dataframe(
-                piv_c.style.format({col: "{:+,.1f}" for col in piv_c.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
-                width="stretch"
-            )
+            formatli_tablo_goster(piv_c)
             st.markdown("---")
             df_c_chart = df_c_all.sort_values('Ay_Sira')
             fig_c = px.bar(
@@ -218,7 +217,6 @@ if masse_list or cc_list or fip_list:
                 )
                 piv_cc_nature = piv_cc_nature.reindex(columns=[col for col in aylar_sirali_cc if col in piv_cc_nature.columns])
                 
-                # Nature (MOD, MOS, FIP vb.) tablosuna da trend ve yorum ekleyelim
                 ay_listesi_cc = list(piv_cc_nature.columns)
                 t_list, y_list = [], []
                 for _, row in piv_cc_nature.iterrows():
@@ -233,14 +231,13 @@ if masse_list or cc_list or fip_list:
                 for col in numeric_cols_cc:
                     piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature[col].iloc[:-1].sum()
                 
-                # TOPLAM satırı için yorum
                 top_row_cc = piv_cc_nature.loc['TOPLAM']
                 t_tr, t_yr = trend_ve_yorum_uret(top_row_cc, ay_listesi_cc)
                 piv_cc_nature.loc['TOPLAM', 'Sonuç / Trend'] = t_tr
                 piv_cc_nature.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Toplam - {t_yr}"
                     
                 st.markdown(f"**{selected_cc_summary}** Numaralı Merkeze Ait Alt Kalemler (K€)")
-                st.dataframe(piv_cc_nature.style.format({col: "{:+,.1f}" for col in piv_cc_nature.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), width="stretch")
+                formatli_tablo_goster(piv_cc_nature)
                 
                 fig_cc_nature = px.bar(
                     df_cc_filtered, x='Performance', y='Nature', color='Ay', orientation='h',
@@ -283,7 +280,6 @@ if masse_list or cc_list or fip_list:
             st.info("FIP verisi bulunamadı.")
 
     with tab5:
-        # 📂 YENİ SEKME: FIP Grup Analizi (Üst tablo iptal, direkt seçim ve detay)
         df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw_group.empty:
             st.subheader("📂 FIP Grup Bazlı Detaylı İnceleme (3A, 3B vb.)")
@@ -300,7 +296,6 @@ if masse_list or cc_list or fip_list:
                 )
                 piv_grup_detay = piv_grup_detay.reindex(columns=[col for col in aylar_sirali_grup if col in piv_grup_detay.columns])
                 
-                # Trend ve Yorum Sütunları Ekleme
                 ay_listesi_g = list(piv_grup_detay.columns)
                 tg_list, yg_list = [], []
                 for _, row in piv_grup_detay.iterrows():
@@ -315,14 +310,13 @@ if masse_list or cc_list or fip_list:
                 for col in numeric_cols_gd:
                     piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay[col].iloc[:-1].sum()
                 
-                # TOPLAM satırı için akıllı yorum
                 top_row_g = piv_grup_detay.loc['TOPLAM']
                 g_tr, g_yr = trend_ve_yorum_uret(top_row_g, ay_listesi_g)
                 piv_grup_detay.loc['TOPLAM', 'Sonuç / Trend'] = g_tr
                 piv_grup_detay.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Grup Toplamı - {g_yr}"
                     
                 st.markdown(f"**{selected_grup}** Grubuna Ait Alt Masraf Kalemleri ve Performans Dağılımı")
-                st.dataframe(piv_grup_detay.style.format({col: "{:+,.1f}" for col in piv_grup_detay.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), width="stretch")
+                formatli_tablo_goster(piv_grup_detay)
                 
                 fig_grup = px.bar(
                     df_grup_filtered, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
@@ -335,10 +329,7 @@ if masse_list or cc_list or fip_list:
     with tab6:
         if piv_f is not None:
             st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
-            st.dataframe(
-                piv_f.style.format({col: "{:+,.1f}" for col in piv_f.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
-                width="stretch"
-            )
+            formatli_tablo_goster(piv_f)
             df_f_chart = pd.concat(fip_list, ignore_index=True).sort_values('Ay_Sira') if fip_list else pd.DataFrame()
             if not df_f_chart.empty:
                 fig_f = px.bar(
