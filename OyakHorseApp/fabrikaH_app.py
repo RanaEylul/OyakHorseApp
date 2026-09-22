@@ -30,7 +30,6 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
         return None
         
     sheet_names = xl.sheet_names
-    
     target_sheet = None
     for s in sheet_names:
         if sheet_type.lower() in s.lower():
@@ -54,15 +53,15 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
 
         elif sheet_type == 'Cost Center':
             df = pd.read_excel(file_source, sheet_name=target_sheet, skiprows=1)
-            df = df.iloc[:, 2:8]
-            df.columns = ['Cost_Center', 'Nature', 'Ref', 'Ref_Adj', 'Parity', 'Performance']
-            df = df.dropna(subset=['Cost_Center'])
+            df = df.iloc[:, 1:9]
+            df.columns = ['Department', 'Cost_Center', 'Nature', 'Ref', 'Ref_Adj', 'Parity', 'Performance', 'Actual']
             df['Cost_Center'] = df['Cost_Center'].ffill()
-            df = df[df['Cost_Center'].astype(str).str.startswith('TY') & ~df['Cost_Center'].astype(str).str.contains('Toplam')]
+            df = df.dropna(subset=['Nature'])
+            df = df[df['Cost_Center'].astype(str).str.startswith('TY') & ~df['Cost_Center'].astype(str).str.contains('Toplam') & ~df['Nature'].astype(str).str.contains('Toplam')]
             df['Performance'] = pd.to_numeric(df['Performance'], errors='coerce').fillna(0)
             df['Ay_Sira'] = ay_no
             df['Ay'] = ay_adi
-            return df[['Cost_Center', 'Performance', 'Ay', 'Ay_Sira']]
+            return df[['Cost_Center', 'Nature', 'Performance', 'Ay', 'Ay_Sira']]
 
         elif sheet_type == 'FIP':
             df = pd.read_excel(file_source, sheet_name=target_sheet, skiprows=2)
@@ -71,10 +70,18 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
             df['Cost_Center'] = df['Cost_Center'].ffill()
             df = df.dropna(subset=['Masraf_Kalemi'])
             df = df[~df['Masraf_Kalemi'].astype(str).str.contains('Toplam|Account')]
+            
+            def grup_turu_bul(kalem_adi):
+                match = re.search(r'([0-9][A-Za-z])', str(kalem_adi))
+                if match:
+                    return match.group(1).upper()
+                return "DİĞER"
+                
+            df['Grup'] = df['Masraf_Kalemi'].apply(grup_turu_bul)
             df['Performance'] = pd.to_numeric(df['Performance'], errors='coerce').fillna(0)
             df['Ay_Sira'] = ay_no
             df['Ay'] = ay_adi
-            return df[['Cost_Center', 'Masraf_Kalemi', 'Performance', 'Ay', 'Ay_Sira']]
+            return df[['Cost_Center', 'Masraf_Kalemi', 'Grup', 'Performance', 'Ay', 'Ay_Sira']]
             
     except Exception:
         return None
@@ -87,17 +94,17 @@ def trend_ve_yorum_uret(row, ay_kolonlari):
     onceki_ay = row[ay_kolonlari[-2]]
     
     if son_ay > 50:
-        return "🔴 En kritik merkez", "Bütçe aşımı yüksek risk oluşturuyor."
+        return "🔴 Yüksek Risk / Bütçe Aşımı", "Maliyetler bütçenin oldukça üzerine çıktı."
     elif son_ay < -50:
-        return "🟢 Güçlü performans", "Ciddi tasarruf / olumlu sapma sağlandı."
+        return "🟢 Güçlü Tasarruf", "Ciddi oranda olumlu sapma / tasarruf sağlandı."
     elif son_ay < onceki_ay and son_ay < 0:
-        return "🟢 İyileşme / Tasarruf artıyor", "Performans olumlu yönde gelişiyor."
+        return "🟢 İyileşme Eğilimi", "Tasarruf miktarı artıyor, performans olumlu."
     elif son_ay > onceki_ay and son_ay > 0:
-        return "🔴 Bozulma var / Artan Sapma", "Performans olumsuza kayıyor."
+        return "🔴 Maliyet Artışı", "Harcamalarda olumsuz yönde artış var."
     elif abs(son_ay - onceki_ay) < 10:
-        return "🟡 Kontrol altında", "Stabil seyir devam ediyor."
+        return "🟡 Kontrol Altında", "Stabil bir maliyet seyri izleniyor."
     else:
-        return "🟠 Takip edilmeli", "Aylık dalgalanma mevcut."
+        return "🟠 Takip Edilmeli", "Dönemsel dalgalanma gözleniyor."
 
 def pivot_tablo_olustur(veriler, index_col):
     if not veriler:
@@ -119,17 +126,20 @@ def pivot_tablo_olustur(veriler, index_col):
     piv['Sonuç / Trend'] = trendler
     piv['Yönetici Analiz Yorumu'] = yorumlar
     
-    # TOPLAM satırı ekleme
     numeric_cols = piv.select_dtypes(include='number').columns
     piv.loc['TOPLAM'] = 0
     for col in numeric_cols:
         piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
-    piv.loc['TOPLAM', 'Sonuç / Trend'] = '-'
-    piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = 'Genel Toplam'
+    
+    # TOPLAM satırı için de akıllı yorum üretme
+    toplam_row = piv.loc['TOPLAM']
+    top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
+    piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
+    piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
 
     return piv, df_concat
 
-# --- SIDEBAR (Sadece Yükleme Alanı) ---
+# --- SIDEBAR (Dosya Yükleme) ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
 uploaded_files = st.sidebar.file_uploader("Aylık Excel Dosyalarını Yükleyin (Örn: M06, M07, M08)", type=["xlsx", "xls"], accept_multiple_files=True)
 
@@ -152,14 +162,15 @@ if uploaded_files:
 if masse_list or cc_list or fip_list:
     piv_m, df_m_all = pivot_tablo_olustur(masse_list, 'Kalem')
     piv_c, df_c_all = pivot_tablo_olustur(cc_list, 'Cost_Center')
-    piv_f, df_f_all = pivot_tablo_olustur(fip_list, 'Masraf_Kalemi')  # Orijinal genel FIP tablosu
+    piv_f, df_f_all = pivot_tablo_olustur(fip_list, 'Masraf_Kalemi')
 
-    # 4 SEKMELİ YAPI
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📋 Ana Kalemler", 
         "🏢 Cost Center Özeti", 
-        "🛠️ Alt Masraf Kalemleri (FIP)", 
-        "🔍 Cost Center FIP Detayı"
+        "📑 Cost Center Detayları", 
+        "🔍 Cost Center FIP Detayı", 
+        "📂 FIP Grup Analizi (3A, 3B vb.)", 
+        "🛠️ Alt Masraf Kalemleri (FIP)"
     ])
 
     with tab1:
@@ -169,7 +180,6 @@ if masse_list or cc_list or fip_list:
                 piv_m.style.format({col: "{:+,.1f}" for col in piv_m.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
                 width="stretch"
             )
-            
             df_m_chart = df_m_all.sort_values('Ay_Sira')
             fig_m = px.line(
                 df_m_chart, x='Ay', y='Performance', color='Kalem', markers=True,
@@ -179,12 +189,12 @@ if masse_list or cc_list or fip_list:
 
     with tab2:
         if piv_c is not None:
-            st.subheader("Cost Center (Masraf Yeri) Yönetici Özeti")
+            st.subheader("🏢 Cost Center (Masraf Yeri) Yönetici Özeti")
             st.dataframe(
                 piv_c.style.format({col: "{:+,.1f}" for col in piv_c.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
                 width="stretch"
             )
-            
+            st.markdown("---")
             df_c_chart = df_c_all.sort_values('Ay_Sira')
             fig_c = px.bar(
                 df_c_chart, x='Cost_Center', y='Performance', color='Ay', barmode='group',
@@ -193,56 +203,76 @@ if masse_list or cc_list or fip_list:
             st.plotly_chart(fig_c, width="stretch")
 
     with tab3:
-        # Ekran görüntüsündeki orijinal Alt Masraf Kalemleri (FIP) Genel Görünümü
-        if piv_f is not None:
-            st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
-            st.dataframe(
-                piv_f.style.format({col: "{:+,.1f}" for col in piv_f.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
-                width="stretch"
-            )
+        df_c_raw = pd.concat(cc_list, ignore_index=True) if cc_list else pd.DataFrame()
+        if not df_c_raw.empty:
+            st.subheader("📑 Cost Center Alt Kırılım Detayları (MOD, MOS, FIP, Taxe, Depreciation)")
+            unique_cc_summary = sorted(df_c_raw['Cost_Center'].dropna().unique().tolist())
+            selected_cc_summary = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_cc_summary, key="cc_summary_selectbox")
             
-            df_f_chart = pd.concat(fip_list, ignore_index=True).sort_values('Ay_Sira') if fip_list else pd.DataFrame()
-            if not df_f_chart.empty:
-                fig_f = px.bar(
-                    df_f_chart, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
-                    title="Alt Masraf Kalemleri Dağılım Grafiği (K€)"
+            if selected_cc_summary:
+                df_cc_filtered = df_c_raw[df_c_raw['Cost_Center'] == selected_cc_summary]
+                aylar_sirali_cc = df_cc_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                
+                piv_cc_nature = df_cc_filtered.pivot_table(
+                    index='Nature', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
                 )
-                st.plotly_chart(fig_f, width="stretch")
+                piv_cc_nature = piv_cc_nature.reindex(columns=[col for col in aylar_sirali_cc if col in piv_cc_nature.columns])
+                
+                # Nature (MOD, MOS, FIP vb.) tablosuna da trend ve yorum ekleyelim
+                ay_listesi_cc = list(piv_cc_nature.columns)
+                t_list, y_list = [], []
+                for _, row in piv_cc_nature.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_cc)
+                    t_list.append(tr)
+                    y_list.append(yr)
+                piv_cc_nature['Sonuç / Trend'] = t_list
+                piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
+                
+                numeric_cols_cc = piv_cc_nature.select_dtypes(include='number').columns
+                piv_cc_nature.loc['TOPLAM'] = 0
+                for col in numeric_cols_cc:
+                    piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature[col].iloc[:-1].sum()
+                
+                # TOPLAM satırı için yorum
+                top_row_cc = piv_cc_nature.loc['TOPLAM']
+                t_tr, t_yr = trend_ve_yorum_uret(top_row_cc, ay_listesi_cc)
+                piv_cc_nature.loc['TOPLAM', 'Sonuç / Trend'] = t_tr
+                piv_cc_nature.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Toplam - {t_yr}"
+                    
+                st.markdown(f"**{selected_cc_summary}** Numaralı Merkeze Ait Alt Kalemler (K€)")
+                st.dataframe(piv_cc_nature.style.format({col: "{:+,.1f}" for col in piv_cc_nature.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), width="stretch")
+                
+                fig_cc_nature = px.bar(
+                    df_cc_filtered, x='Performance', y='Nature', color='Ay', orientation='h',
+                    title=f"{selected_cc_summary} - Alt Kalemler Dağılım Grafiği (K€)"
+                )
+                st.plotly_chart(fig_cc_nature, width="stretch")
+        else:
+            st.info("Cost Center detay verisi bulunamadı.")
 
     with tab4:
-        # Yeni eklenen Cost Center bazlı filtreleme sekmesi
         df_f_raw = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw.empty:
             st.subheader("🛠️ Cost Center Bazlı Alt Masraf Kalemleri Arama ve İnceleme")
-            
             unique_ccs = sorted(df_f_raw['Cost_Center'].dropna().unique().tolist())
-            selected_cc = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_ccs)
+            selected_cc = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_ccs, key="cc_fip_select")
             
             if selected_cc:
                 df_filtered = df_f_raw[df_f_raw['Cost_Center'] == selected_cc]
-                
                 aylar_sirali = df_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
                 
                 piv_fip_cc = df_filtered.pivot_table(
-                    index='Masraf_Kalemi', 
-                    columns='Ay', 
-                    values='Performance', 
-                    aggfunc='sum', 
-                    fill_value=0
+                    index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
                 )
                 piv_fip_cc = piv_fip_cc.reindex(columns=[col for col in aylar_sirali if col in piv_fip_cc.columns])
                 
-                # FIP CC Tablosu için TOPLAM satırı
                 numeric_cols_fip = piv_fip_cc.select_dtypes(include='number').columns
                 piv_fip_cc.loc['TOPLAM'] = 0
                 for col in numeric_cols_fip:
                     piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc[col].iloc[:-1].sum()
                 
                 st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri Performans Özeti (K€)")
-                st.dataframe(
-                    piv_fip_cc.style.format({col: "{:+,.1f}" for col in piv_fip_cc.columns}),
-                    width="stretch"
-                )
+                st.dataframe(piv_fip_cc.style.format({col: "{:+,.1f}" for col in piv_fip_cc.columns}), width="stretch")
                 
                 fig_f_cc = px.bar(
                     df_filtered, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
@@ -251,6 +281,71 @@ if masse_list or cc_list or fip_list:
                 st.plotly_chart(fig_f_cc, width="stretch")
         else:
             st.info("FIP verisi bulunamadı.")
+
+    with tab5:
+        # 📂 YENİ SEKME: FIP Grup Analizi (Üst tablo iptal, direkt seçim ve detay)
+        df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
+        if not df_f_raw_group.empty:
+            st.subheader("📂 FIP Grup Bazlı Detaylı İnceleme (3A, 3B vb.)")
+            
+            unique_gruplar = sorted(df_f_raw_group['Grup'].dropna().unique().tolist())
+            selected_grup = st.selectbox("İncelemek İstediğiniz FIP Grubunu Seçin:", unique_gruplar, key="grup_select_tab5")
+            
+            if selected_grup:
+                df_grup_filtered = df_f_raw_group[df_f_raw_group['Grup'] == selected_grup]
+                aylar_sirali_grup = df_grup_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                
+                piv_grup_detay = df_grup_filtered.pivot_table(
+                    index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
+                )
+                piv_grup_detay = piv_grup_detay.reindex(columns=[col for col in aylar_sirali_grup if col in piv_grup_detay.columns])
+                
+                # Trend ve Yorum Sütunları Ekleme
+                ay_listesi_g = list(piv_grup_detay.columns)
+                tg_list, yg_list = [], []
+                for _, row in piv_grup_detay.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_g)
+                    tg_list.append(tr)
+                    yg_list.append(yr)
+                piv_grup_detay['Sonuç / Trend'] = tg_list
+                piv_grup_detay['Yönetici Analiz Yorumu'] = yg_list
+                
+                numeric_cols_gd = piv_grup_detay.select_dtypes(include='number').columns
+                piv_grup_detay.loc['TOPLAM'] = 0
+                for col in numeric_cols_gd:
+                    piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay[col].iloc[:-1].sum()
+                
+                # TOPLAM satırı için akıllı yorum
+                top_row_g = piv_grup_detay.loc['TOPLAM']
+                g_tr, g_yr = trend_ve_yorum_uret(top_row_g, ay_listesi_g)
+                piv_grup_detay.loc['TOPLAM', 'Sonuç / Trend'] = g_tr
+                piv_grup_detay.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Grup Toplamı - {g_yr}"
+                    
+                st.markdown(f"**{selected_grup}** Grubuna Ait Alt Masraf Kalemleri ve Performans Dağılımı")
+                st.dataframe(piv_grup_detay.style.format({col: "{:+,.1f}" for col in piv_grup_detay.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), width="stretch")
+                
+                fig_grup = px.bar(
+                    df_grup_filtered, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
+                    title=f"{selected_grup} Grubu Kalemlerinin Dağılımı (K€)"
+                )
+                st.plotly_chart(fig_grup, width="stretch")
+        else:
+            st.info("FIP grup verisi bulunamadı.")
+
+    with tab6:
+        if piv_f is not None:
+            st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
+            st.dataframe(
+                piv_f.style.format({col: "{:+,.1f}" for col in piv_f.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}), 
+                width="stretch"
+            )
+            df_f_chart = pd.concat(fip_list, ignore_index=True).sort_values('Ay_Sira') if fip_list else pd.DataFrame()
+            if not df_f_chart.empty:
+                fig_f = px.bar(
+                    df_f_chart, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
+                    title="Alt Masraf Kalemleri Dağılım Grafiği (K€)"
+                )
+                st.plotly_chart(fig_f, width="stretch")
 
 else:
     st.info("💡 Karşılaştırma tabloları ve trend grafiklerinin oluşması için sol panelden aylık Excel dosyalarınızı yükleyin.")
