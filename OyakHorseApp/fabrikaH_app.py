@@ -338,5 +338,6 @@ if masse_list or cc_list or fip_list:
                 )
                 st.plotly_chart(fig_f, width="stretch")
 
+
 else:
     st.info("💡 Karşılaştırma tabloları ve trend grafiklerinin oluşması için sol panelden aylık Excel dosyalarınızı yükleyin.")
