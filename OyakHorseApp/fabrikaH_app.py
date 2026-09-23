@@ -143,27 +143,33 @@ def pivot_tablo_olustur(veriler, index_col):
     piv.columns.name = None
     piv.index.name = index_col
     
-    # İstediğin özel sıralama mantığı (MOD, MOS, FIP, TAXE, DEPRECIATION ve TOPLAM en sonda)
+    # Kesin sıralama ve TOPLAM satırının eklenmesi
     if index_col == 'Kalem':
         istenilen_sira = ['MOD', 'MOS', 'FIP', 'TAXE', 'DEPRECIATION', 'DEPRECİATİON']
-        toplam_row = None
-        if 'TOPLAM' in piv.index:
-            toplam_row = piv.loc['TOPLAM']
-            piv = piv.drop('TOPLAM')
-            
-        aktif_indexler = list(piv.index)
+        aktif_indexler = [idx for idx in piv.index if str(idx).upper() != 'TOPLAM']
+        
         def sort_key(idx_val):
             val_upper = str(idx_val).upper()
             for i, k in enumerate(istenilen_sira):
                 if k in val_upper:
                     return i
-            return 50 # Listede olmayanlar arada uygun bir yere yerleşir
+            return 50
             
         sirali_indexler = sorted(aktif_indexler, key=sort_key)
         piv = piv.reindex(sirali_indexler)
         
-        if toplam_row is not None:
-            piv.loc['TOPLAM'] = toplam_row
+        # TOPLAM satırını her koşulda en alta hesaplayıp ekliyoruz
+        numeric_cols = piv.select_dtypes(include='number').columns
+        piv.loc['TOPLAM'] = 0
+        for col in numeric_cols:
+            if len(piv) > 1:
+                piv.loc['TOPLAM', col] = piv.drop('TOPLAM', errors='ignore')[col].sum()
+    else:
+        numeric_cols = piv.select_dtypes(include='number').columns
+        piv.loc['TOPLAM'] = 0
+        for col in numeric_cols:
+            if len(piv) > 1:
+                piv.loc['TOPLAM', col] = piv.drop('TOPLAM', errors='ignore')[col].sum()
 
     ay_listesi = list(piv.columns)
     trendler, yorumlar = [], []
@@ -175,25 +181,10 @@ def pivot_tablo_olustur(veriler, index_col):
     piv['Sonuç / Trend'] = trendler
     piv['Yönetici Analiz Yorumu'] = yorumlar
     
-    numeric_cols = piv.select_dtypes(include='number').columns
-    if index_col != 'Kalem':
-        piv.loc['TOPLAM'] = 0
-        for col in numeric_cols:
-            if len(piv) > 1:
-                piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
-        toplam_row = piv.loc['TOPLAM']
-        top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
-        piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
-        piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
-    else:
-        if 'TOPLAM' in piv.index:
-            for col in numeric_cols:
-                if col not in ['Sonuç / Trend']:
-                    piv.loc['TOPLAM', col] = piv.drop('TOPLAM')[col].sum()
-            toplam_row = piv.loc['TOPLAM']
-            top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
-            piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
-            piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
+    toplam_row = piv.loc['TOPLAM']
+    top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
+    piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
+    piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
 
     return piv, df_concat
 
@@ -239,8 +230,8 @@ if masse_list or cc_list or fip_list:
             if not df_m_all.empty:
                 df_m_chart = df_m_all.sort_values('Ay_Sira')
                 
-                # Tablodaki özel sıralamayı grafiğe de birebir yansıtıyoruz
-                sabit_kalem_sirasi = [k for k in piv_m.index if k not in ['TOPLAM', 'Sonuç / Trend']]
+                # Tablodaki sıra (TOPLAM hariç) grafiğe birebir aktarılıyor
+                sabit_kalem_sirasi = [k for k in piv_m.index if k != 'TOPLAM']
                 
                 fig_m = px.bar(
                     df_m_chart, x='Kalem', y='Performance', color='Ay', barmode='group',
@@ -301,6 +292,12 @@ if masse_list or cc_list or fip_list:
                 piv_cc_nature.columns.name = None
                 piv_cc_nature.index.name = 'Nature'
                 
+                numeric_cols_cc = piv_cc_nature.select_dtypes(include='number').columns
+                piv_cc_nature.loc['TOPLAM'] = 0
+                for col in numeric_cols_cc:
+                    if len(piv_cc_nature) > 1:
+                        piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature.drop('TOPLAM', errors='ignore')[col].sum()
+                
                 ay_listesi_cc = list(piv_cc_nature.columns)
                 t_list, y_list = [], []
                 for _, row in piv_cc_nature.iterrows():
@@ -309,12 +306,6 @@ if masse_list or cc_list or fip_list:
                     y_list.append(yr)
                 piv_cc_nature['Sonuç / Trend'] = t_list
                 piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
-                
-                numeric_cols_cc = piv_cc_nature.select_dtypes(include='number').columns
-                piv_cc_nature.loc['TOPLAM'] = 0
-                for col in numeric_cols_cc:
-                    if len(piv_cc_nature) > 1:
-                        piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature[col].iloc[:-1].sum()
                 
                 top_row_cc = piv_cc_nature.loc['TOPLAM']
                 t_tr, t_yr = trend_ve_yorum_uret(top_row_cc, ay_listesi_cc)
@@ -363,8 +354,22 @@ if masse_list or cc_list or fip_list:
                 piv_fip_cc.loc['TOPLAM'] = 0
                 for col in numeric_cols_fip:
                     if len(piv_fip_cc) > 1:
-                        piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc[col].iloc[:-1].sum()
+                        piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc.drop('TOPLAM', errors='ignore')[col].sum()
                 
+                ay_listesi_fip = list(piv_fip_cc.columns)
+                t_fip_list, y_fip_list = [], []
+                for _, row in piv_fip_cc.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_fip)
+                    t_fip_list.append(tr)
+                    y_fip_list.append(yr)
+                piv_fip_cc['Sonuç / Trend'] = t_fip_list
+                piv_fip_cc['Yönetici Analiz Yorumu'] = y_fip_list
+
+                top_row_fip = piv_fip_cc.loc['TOPLAM']
+                t_tr_f, t_yr_f = trend_ve_yorum_uret(top_row_fip, ay_listesi_fip)
+                piv_fip_cc.loc['TOPLAM', 'Sonuç / Trend'] = t_tr_f
+                piv_fip_cc.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Toplam - {t_yr_f}"
+
                 st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri (K€)")
                 formatli_tablo_goster(piv_fip_cc)
                 
@@ -404,6 +409,12 @@ if masse_list or cc_list or fip_list:
                 piv_grup_detay.columns.name = None
                 piv_grup_detay.index.name = 'Masraf_Kalemi'
                 
+                numeric_cols_gd = piv_grup_detay.select_dtypes(include='number').columns
+                piv_grup_detay.loc['TOPLAM'] = 0
+                for col in numeric_cols_gd:
+                    if len(piv_grup_detay) > 1:
+                        piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay.drop('TOPLAM', errors='ignore')[col].sum()
+
                 ay_listesi_g = list(piv_grup_detay.columns)
                 tg_list, yg_list = [], []
                 for _, row in piv_grup_detay.iterrows():
@@ -412,12 +423,6 @@ if masse_list or cc_list or fip_list:
                     yg_list.append(yr)
                 piv_grup_detay['Sonuç / Trend'] = tg_list
                 piv_grup_detay['Yönetici Analiz Yorumu'] = yg_list
-                
-                numeric_cols_gd = piv_grup_detay.select_dtypes(include='number').columns
-                piv_grup_detay.loc['TOPLAM'] = 0
-                for col in numeric_cols_gd:
-                    if len(piv_grup_detay) > 1:
-                        piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay[col].iloc[:-1].sum()
                 
                 top_row_g = piv_grup_detay.loc['TOPLAM']
                 g_tr, g_yr = trend_ve_yorum_uret(top_row_g, ay_listesi_g)
