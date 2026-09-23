@@ -143,6 +143,28 @@ def pivot_tablo_olustur(veriler, index_col):
     piv.columns.name = None
     piv.index.name = index_col
     
+    # İstediğin özel sıralama mantığı (MOD, MOS, FIP, TAXE, DEPRECIATION ve TOPLAM en sonda)
+    if index_col == 'Kalem':
+        istenilen_sira = ['MOD', 'MOS', 'FIP', 'TAXE', 'DEPRECIATION', 'DEPRECİATİON']
+        toplam_row = None
+        if 'TOPLAM' in piv.index:
+            toplam_row = piv.loc['TOPLAM']
+            piv = piv.drop('TOPLAM')
+            
+        aktif_indexler = list(piv.index)
+        def sort_key(idx_val):
+            val_upper = str(idx_val).upper()
+            for i, k in enumerate(istenilen_sira):
+                if k in val_upper:
+                    return i
+            return 50 # Listede olmayanlar arada uygun bir yere yerleşir
+            
+        sirali_indexler = sorted(aktif_indexler, key=sort_key)
+        piv = piv.reindex(sirali_indexler)
+        
+        if toplam_row is not None:
+            piv.loc['TOPLAM'] = toplam_row
+
     ay_listesi = list(piv.columns)
     trendler, yorumlar = [], []
     for _, row in piv.iterrows():
@@ -154,15 +176,24 @@ def pivot_tablo_olustur(veriler, index_col):
     piv['Yönetici Analiz Yorumu'] = yorumlar
     
     numeric_cols = piv.select_dtypes(include='number').columns
-    piv.loc['TOPLAM'] = 0
-    for col in numeric_cols:
-        if len(piv) > 1:
-            piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
-    
-    toplam_row = piv.loc['TOPLAM']
-    top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
-    piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
-    piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
+    if index_col != 'Kalem':
+        piv.loc['TOPLAM'] = 0
+        for col in numeric_cols:
+            if len(piv) > 1:
+                piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
+        toplam_row = piv.loc['TOPLAM']
+        top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
+        piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
+        piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
+    else:
+        if 'TOPLAM' in piv.index:
+            for col in numeric_cols:
+                if col not in ['Sonuç / Trend']:
+                    piv.loc['TOPLAM', col] = piv.drop('TOPLAM')[col].sum()
+            toplam_row = piv.loc['TOPLAM']
+            top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
+            piv.loc['TOPLAM', 'Sonuç / Trend'] = top_tr
+            piv.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Genel Toplam - {top_yr}"
 
     return piv, df_concat
 
@@ -207,11 +238,15 @@ if masse_list or cc_list or fip_list:
             
             if not df_m_all.empty:
                 df_m_chart = df_m_all.sort_values('Ay_Sira')
-                # Her ay farklı renk, artı ve eksileri net gösteren gruplu çubuk grafik
+                
+                # Tablodaki özel sıralamayı grafiğe de birebir yansıtıyoruz
+                sabit_kalem_sirasi = [k for k in piv_m.index if k not in ['TOPLAM', 'Sonuç / Trend']]
+                
                 fig_m = px.bar(
                     df_m_chart, x='Kalem', y='Performance', color='Ay', barmode='group',
                     title="Ana Kalemlerin Aylara Göre Performansı (+ / - Değerler)",
-                    template="plotly_white"
+                    template="plotly_white",
+                    category_orders={"Kalem": sabit_kalem_sirasi}
                 )
                 fig_m.update_layout(
                     height=420,
