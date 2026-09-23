@@ -213,9 +213,12 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_m.update_layout(
-                    height=450,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    height=420,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    font=dict(size=12),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    xaxis=dict(showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor='#f0f0f0')
                 )
                 st.plotly_chart(fig_m, width="stretch")
 
@@ -232,9 +235,14 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_c.update_layout(
-                    height=450,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    height=420,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    font=dict(size=12),
+                    bargap=0.2,
+                    bargroupgap=0.05,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    xaxis=dict(showgrid=False, tickangle=-30),
+                    yaxis=dict(showgrid=True, gridcolor='#f0f0f0')
                 )
                 st.plotly_chart(fig_c, width="stretch")
 
@@ -285,9 +293,13 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_cc_nature.update_layout(
-                    height=400,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    yaxis={'categoryorder':'total ascending'}
+                    height=380,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    font=dict(size=11),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+                    bargap=0.3,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 st.plotly_chart(fig_cc_nature, width="stretch")
         else:
@@ -326,9 +338,13 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_f_cc.update_layout(
-                    height=500,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    yaxis={'categoryorder':'total ascending'}
+                    height=480,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    font=dict(size=11),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+                    bargap=0.3,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 st.plotly_chart(fig_f_cc, width="stretch")
         else:
@@ -382,9 +398,13 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_grup.update_layout(
-                    height=450,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    yaxis={'categoryorder':'total ascending'}
+                    height=420,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    font=dict(size=11),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+                    bargap=0.3,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 st.plotly_chart(fig_grup, width="stretch")
         else:
@@ -402,12 +422,15 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_f.update_layout(
-                    height=500,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    yaxis={'categoryorder':'total ascending'}
+                    height=480,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    font=dict(size=11),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+                    bargap=0.3,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 st.plotly_chart(fig_f, width="stretch")
 
 else:
     st.info("💡 Karşılaştırma tabloları ve trend grafiklerinin oluşması için sol panelden aylık Excel dosyalarınızı yükleyin.")
-    
