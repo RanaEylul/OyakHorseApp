@@ -119,10 +119,12 @@ def renk_stili_ver(val):
 def formatli_tablo_goster(piv_df):
     format_dict = {col: "{:+,.1f}" for col in piv_df.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}
     
-    # Pandas Styler kullanarak 'Sonuç / Trend' sütununa renkleri doğrudan uyguluyoruz
-    styler = piv_df.style.format(format_dict)
+    styler = piv_df.style.format(format_dict, na_rep="0.0")
     if 'Sonuç / Trend' in piv_df.columns:
-        styler = styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
+        try:
+            styler = styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
+        except AttributeError:
+            styler = styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
         
     st.dataframe(styler, width="stretch")
 
@@ -130,6 +132,8 @@ def pivot_tablo_olustur(veriler, index_col):
     if not veriler:
         return None, []
     df_concat = pd.concat(veriler, ignore_index=True)
+    if df_concat.empty:
+        return None, []
     
     aylar_sirali = df_concat[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
     
@@ -152,7 +156,8 @@ def pivot_tablo_olustur(veriler, index_col):
     numeric_cols = piv.select_dtypes(include='number').columns
     piv.loc['TOPLAM'] = 0
     for col in numeric_cols:
-        piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
+        if len(piv) > 1:
+            piv.loc['TOPLAM', col] = piv[col].iloc[:-1].sum()
     
     toplam_row = piv.loc['TOPLAM']
     top_tr, top_yr = trend_ve_yorum_uret(toplam_row, ay_listesi)
@@ -174,9 +179,9 @@ if uploaded_files:
             c = excel_oku(u_file, u_file.name, 'Cost Center')
             f = excel_oku(u_file, u_file.name, 'FIP')
             
-            if m is not None: masse_list.append(m)
-            if c is not None: cc_list.append(c)
-            if f is not None: fip_list.append(f)
+            if m is not None and not m.empty: masse_list.append(m)
+            if c is not None and not c.empty: cc_list.append(c)
+            if f is not None and not f.empty: fip_list.append(f)
         except Exception as e:
             st.sidebar.error(f"Hata ({u_file.name}): {e}")
 
@@ -200,24 +205,26 @@ if masse_list or cc_list or fip_list:
             st.subheader("Ana Kalemler Performans Özeti (K€)")
             formatli_tablo_goster(piv_m)
             
-            df_m_chart = df_m_all.sort_values('Ay_Sira')
-            fig_m = px.line(
-                df_m_chart, x='Ay', y='Performance', color='Kalem', markers=True,
-                title="Ana Kalemlerin Kronolojik Değişim Grafiği (K€)"
-            )
-            st.plotly_chart(fig_m, width="stretch")
+            if not df_m_all.empty:
+                df_m_chart = df_m_all.sort_values('Ay_Sira')
+                fig_m = px.line(
+                    df_m_chart, x='Ay', y='Performance', color='Kalem', markers=True,
+                    title="Ana Kalemlerin Kronolojik Değişim Grafiği (K€)"
+                )
+                st.plotly_chart(fig_m, width="stretch")
 
     with tab2:
         if piv_c is not None:
             st.subheader("🏢 Cost Center (Masraf Yeri) Yönetici Özeti")
             formatli_tablo_goster(piv_c)
             st.markdown("---")
-            df_c_chart = df_c_all.sort_values('Ay_Sira')
-            fig_c = px.bar(
-                df_c_chart, x='Cost_Center', y='Performance', color='Ay', barmode='group',
-                title="Cost Center'ların Aylık Performans Karşılaştırma Grafiği (K€)"
-            )
-            st.plotly_chart(fig_c, width="stretch")
+            if not df_c_all.empty:
+                df_c_chart = df_c_all.sort_values('Ay_Sira')
+                fig_c = px.bar(
+                    df_c_chart, x='Cost_Center', y='Performance', color='Ay', barmode='group',
+                    title="Cost Center'ların Aylık Performans Karşılaştırma Grafiği (K€)"
+                )
+                st.plotly_chart(fig_c, width="stretch")
 
     with tab3:
         df_c_raw = pd.concat(cc_list, ignore_index=True) if cc_list else pd.DataFrame()
@@ -249,7 +256,8 @@ if masse_list or cc_list or fip_list:
                 numeric_cols_cc = piv_cc_nature.select_dtypes(include='number').columns
                 piv_cc_nature.loc['TOPLAM'] = 0
                 for col in numeric_cols_cc:
-                    piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature[col].iloc[:-1].sum()
+                    if len(piv_cc_nature) > 1:
+                        piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature[col].iloc[:-1].sum()
                 
                 top_row_cc = piv_cc_nature.loc['TOPLAM']
                 t_tr, t_yr = trend_ve_yorum_uret(top_row_cc, ay_listesi_cc)
@@ -288,7 +296,8 @@ if masse_list or cc_list or fip_list:
                 numeric_cols_fip = piv_fip_cc.select_dtypes(include='number').columns
                 piv_fip_cc.loc['TOPLAM'] = 0
                 for col in numeric_cols_fip:
-                    piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc[col].iloc[:-1].sum()
+                    if len(piv_fip_cc) > 1:
+                        piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc[col].iloc[:-1].sum()
                 
                 st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri Performans Özeti (K€)")
                 formatli_tablo_goster(piv_fip_cc)
@@ -332,7 +341,8 @@ if masse_list or cc_list or fip_list:
                 numeric_cols_gd = piv_grup_detay.select_dtypes(include='number').columns
                 piv_grup_detay.loc['TOPLAM'] = 0
                 for col in numeric_cols_gd:
-                    piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay[col].iloc[:-1].sum()
+                    if len(piv_grup_detay) > 1:
+                        piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay[col].iloc[:-1].sum()
                 
                 top_row_g = piv_grup_detay.loc['TOPLAM']
                 g_tr, g_yr = trend_ve_yorum_uret(top_row_g, ay_listesi_g)
