@@ -207,19 +207,21 @@ if masse_list or cc_list or fip_list:
             
             if not df_m_all.empty:
                 df_m_chart = df_m_all.sort_values('Ay_Sira')
-                # Karmaşayı önlemek için temiz ve sade çizgi grafik
-                fig_m = px.line(
-                    df_m_chart, x='Ay', y='Performance', color='Kalem', markers=True,
-                    title="Ana Kalemlerin Kronolojik Trendi",
+                # Her ay farklı renk, artı ve eksileri net gösteren gruplu çubuk grafik
+                fig_m = px.bar(
+                    df_m_chart, x='Kalem', y='Performance', color='Ay', barmode='group',
+                    title="Ana Kalemlerin Aylara Göre Performansı (+ / - Değerler)",
                     template="plotly_white"
                 )
                 fig_m.update_layout(
-                    height=380,
+                    height=420,
                     margin=dict(l=10, r=10, t=40, b=10),
                     font=dict(size=11, color="#333"),
+                    bargap=0.2,
+                    bargroupgap=0.05,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(showgrid=True, gridcolor='#f2f2f2')
+                    xaxis=dict(showgrid=False, tickangle=-20),
+                    yaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
                 )
                 st.plotly_chart(fig_m, width="stretch")
 
@@ -229,7 +231,6 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_c)
             st.markdown("---")
             if not df_c_all.empty:
-                # Çoklu çubuk yerine toplam performans bazlı net bir özet çubuğu
                 df_c_toplam = df_c_all.groupby('Cost_Center')['Performance'].sum().reset_index()
                 df_c_toplam = df_c_toplam.sort_values('Performance', ascending=True)
                 
@@ -242,7 +243,7 @@ if masse_list or cc_list or fip_list:
                     height=380,
                     margin=dict(l=10, r=10, t=40, b=10),
                     font=dict(size=11, color="#333"),
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2'),
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666'),
                     yaxis=dict(showgrid=False)
                 )
                 st.plotly_chart(fig_c, width="stretch")
@@ -288,7 +289,6 @@ if masse_list or cc_list or fip_list:
                 st.markdown(f"**{selected_cc_summary}** Numaralı Merkeze Ait Alt Kalemler (K€)")
                 formatli_tablo_goster(piv_cc_nature)
                 
-                # En yüksek kalemi en üste alan tertemiz yatay çubuk grafik
                 df_cc_toplam_nature = df_cc_filtered.groupby('Nature')['Performance'].sum().reset_index()
                 fig_cc_nature = px.bar(
                     df_cc_toplam_nature, x='Performance', y='Nature', orientation='h',
@@ -300,7 +300,7 @@ if masse_list or cc_list or fip_list:
                     margin=dict(l=10, r=10, t=40, b=10),
                     font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
                 )
                 st.plotly_chart(fig_cc_nature, width="stretch")
         else:
@@ -344,7 +344,7 @@ if masse_list or cc_list or fip_list:
                     margin=dict(l=10, r=10, t=40, b=10),
                     font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
                 )
                 st.plotly_chart(fig_f_cc, width="stretch")
         else:
@@ -403,7 +403,7 @@ if masse_list or cc_list or fip_list:
                     margin=dict(l=10, r=10, t=40, b=10),
                     font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
                 )
                 st.plotly_chart(fig_grup, width="stretch")
         else:
@@ -426,7 +426,7 @@ if masse_list or cc_list or fip_list:
                     margin=dict(l=10, r=10, t=40, b=10),
                     font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
                 )
                 st.plotly_chart(fig_f, width="stretch")
 
