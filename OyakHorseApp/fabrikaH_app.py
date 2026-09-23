@@ -88,28 +88,43 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
 
 def trend_ve_yorum_uret(row, ay_kolonlari):
     if len(ay_kolonlari) < 2:
-        return '<span style="color: #ffc107; font-weight: bold;">➔ Veri Yetersiz</span>', "Yetersiz Ay"
+        return '➔ Takip Edilmeli', "Yetersiz Ay"
     
     son_ay = row[ay_kolonlari[-1]]
     onceki_ay = row[ay_kolonlari[-2]]
     
     if son_ay > 50:
-        return '<span style="color: #dc3545; font-weight: bold;">▼ Yüksek Risk / Bütçe Aşımı</span>', "Maliyetler bütçenin oldukça üzerine çıktı."
+        return '▼ Yüksek Risk / Bütçe Aşımı', "Maliyetler bütçenin oldukça üzerine çıktı."
     elif son_ay < -50:
-        return '<span style="color: #28a745; font-weight: bold;">▲ Güçlü Tasarruf</span>', "Ciddi oranda olumlu sapma / tasarruf sağlandı."
+        return '▲ Güçlü Tasarruf', "Ciddi oranda olumlu sapma / tasarruf sağlandı."
     elif son_ay < onceki_ay and son_ay < 0:
-        return '<span style="color: #28a745; font-weight: bold;">▲ İyileşme Eğilimi</span>', "Tasarruf miktarı artıyor, performans olumlu."
+        return '▲ İyileşme Eğilimi', "Tasarruf miktarı artıyor, performans olumlu."
     elif son_ay > onceki_ay and son_ay > 0:
-        return '<span style="color: #dc3545; font-weight: bold;">▼ Maliyet Artışı</span>', "Harcamalarda olumsuz yönde artış var."
+        return '▼ Maliyet Artışı', "Harcamalarda olumsuz yönde artış var."
     elif abs(son_ay - onceki_ay) < 10:
-        return '<span style="color: #ffc107; font-weight: bold;">➔ Kontrol Altında</span>', "Stabil bir maliyet seyri izleniyor."
+        return '➔ Kontrol Altında', "Stabil bir maliyet seyri izleniyor."
     else:
-        return '<span style="color: #ffc107; font-weight: bold;">➔ Takip Edilmeli</span>', "Dönemsel dalgalanma gözleniyor."
+        return '➔ Takip Edilmeli', "Dönemsel dalgalanma gözleniyor."
+
+def renk_stili_ver(val):
+    val_str = str(val)
+    if "▲" in val_str:
+        return 'color: #2e7d32; font-weight: bold;'  # Koyu Yeşil
+    elif "▼" in val_str:
+        return 'color: #c62828; font-weight: bold;'  # Koyu Kırmızı
+    elif "➔" in val_str:
+        return 'color: #ef6c00; font-weight: bold;'  # Koyu Turuncu
+    return ''
 
 def formatli_tablo_goster(piv_df):
     format_dict = {col: "{:+,.1f}" for col in piv_df.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}
-    styled = piv_df.style.format(format_dict)
-    st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
+    
+    # Pandas Styler kullanarak 'Sonuç / Trend' sütununa renkleri doğrudan uyguluyoruz
+    styler = piv_df.style.format(format_dict)
+    if 'Sonuç / Trend' in piv_df.columns:
+        styler = styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
+        
+    st.dataframe(styler, width="stretch")
 
 def pivot_tablo_olustur(veriler, index_col):
     if not veriler:
@@ -121,7 +136,6 @@ def pivot_tablo_olustur(veriler, index_col):
     piv = df_concat.pivot_table(index=index_col, columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
     piv = piv.reindex(columns=[col for col in aylar_sirali if col in piv.columns])
     
-    # Sol üstteki sütun grubunun adını temizle ve index adına orijinal sütun adını ver (Böylece 'Ay' yazısı yerine 'Kalem' vb. gelir)
     piv.columns.name = None
     piv.index.name = index_col
     
@@ -277,7 +291,7 @@ if masse_list or cc_list or fip_list:
                     piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc[col].iloc[:-1].sum()
                 
                 st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri Performans Özeti (K€)")
-                st.dataframe(piv_fip_cc.style.format({col: "{:+,.1f}" for col in piv_fip_cc.columns}), width="stretch")
+                formatli_tablo_goster(piv_fip_cc)
                 
                 fig_f_cc = px.bar(
                     df_filtered, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
