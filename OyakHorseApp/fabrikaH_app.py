@@ -109,11 +109,11 @@ def trend_ve_yorum_uret(row, ay_kolonlari):
 def renk_stili_ver(val):
     val_str = str(val)
     if "▲" in val_str:
-        return 'color: #2e7d32; font-weight: bold;'  # Koyu Yeşil
+        return 'color: #2e7d32; font-weight: bold;'
     elif "▼" in val_str:
-        return 'color: #c62828; font-weight: bold;'  # Koyu Kırmızı
+        return 'color: #c62828; font-weight: bold;'
     elif "➔" in val_str:
-        return 'color: #ef6c00; font-weight: bold;'  # Koyu Turuncu
+        return 'color: #ef6c00; font-weight: bold;'
     return ''
 
 def formatli_tablo_goster(piv_df):
@@ -166,7 +166,7 @@ def pivot_tablo_olustur(veriler, index_col):
 
     return piv, df_concat
 
-# --- SIDEBAR (Dosya Yükleme) ---
+# --- SIDEBAR ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
 uploaded_files = st.sidebar.file_uploader("Aylık Excel Dosyalarını Yükleyin (Örn: M06, M07, M08)", type=["xlsx", "xls"], accept_multiple_files=True)
 
@@ -207,18 +207,19 @@ if masse_list or cc_list or fip_list:
             
             if not df_m_all.empty:
                 df_m_chart = df_m_all.sort_values('Ay_Sira')
+                # Karmaşayı önlemek için temiz ve sade çizgi grafik
                 fig_m = px.line(
                     df_m_chart, x='Ay', y='Performance', color='Kalem', markers=True,
-                    title="Ana Kalemlerin Kronolojik Değişim Grafiği (K€)",
+                    title="Ana Kalemlerin Kronolojik Trendi",
                     template="plotly_white"
                 )
                 fig_m.update_layout(
-                    height=420,
-                    margin=dict(l=10, r=10, t=50, b=10),
-                    font=dict(size=12),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    height=380,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
                     xaxis=dict(showgrid=False),
-                    yaxis=dict(showgrid=True, gridcolor='#f0f0f0')
+                    yaxis=dict(showgrid=True, gridcolor='#f2f2f2')
                 )
                 st.plotly_chart(fig_m, width="stretch")
 
@@ -228,28 +229,28 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_c)
             st.markdown("---")
             if not df_c_all.empty:
-                df_c_chart = df_c_all.sort_values('Ay_Sira')
+                # Çoklu çubuk yerine toplam performans bazlı net bir özet çubuğu
+                df_c_toplam = df_c_all.groupby('Cost_Center')['Performance'].sum().reset_index()
+                df_c_toplam = df_c_toplam.sort_values('Performance', ascending=True)
+                
                 fig_c = px.bar(
-                    df_c_chart, x='Cost_Center', y='Performance', color='Ay', barmode='group',
-                    title="Cost Center'ların Aylık Performans Karşılaştırma Grafiği (K€)",
+                    df_c_toplam, x='Performance', y='Cost_Center', orientation='h',
+                    title="Cost Center Bazlı Net Performans Dağılımı (K€)",
                     template="plotly_white"
                 )
                 fig_c.update_layout(
-                    height=420,
-                    margin=dict(l=10, r=10, t=50, b=10),
-                    font=dict(size=12),
-                    bargap=0.2,
-                    bargroupgap=0.05,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    xaxis=dict(showgrid=False, tickangle=-30),
-                    yaxis=dict(showgrid=True, gridcolor='#f0f0f0')
+                    height=380,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2'),
+                    yaxis=dict(showgrid=False)
                 )
                 st.plotly_chart(fig_c, width="stretch")
 
     with tab3:
         df_c_raw = pd.concat(cc_list, ignore_index=True) if cc_list else pd.DataFrame()
         if not df_c_raw.empty:
-            st.subheader("📑 Cost Center Alt Kırılım Detayları (MOD, MOS, FIP, Taxe, Depreciation)")
+            st.subheader("📑 Cost Center Alt Kırılım Detayları")
             unique_cc_summary = sorted(df_c_raw['Cost_Center'].dropna().unique().tolist())
             selected_cc_summary = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_cc_summary, key="cc_summary_selectbox")
             
@@ -287,19 +288,19 @@ if masse_list or cc_list or fip_list:
                 st.markdown(f"**{selected_cc_summary}** Numaralı Merkeze Ait Alt Kalemler (K€)")
                 formatli_tablo_goster(piv_cc_nature)
                 
+                # En yüksek kalemi en üste alan tertemiz yatay çubuk grafik
+                df_cc_toplam_nature = df_cc_filtered.groupby('Nature')['Performance'].sum().reset_index()
                 fig_cc_nature = px.bar(
-                    df_cc_filtered, x='Performance', y='Nature', color='Ay', orientation='h',
-                    title=f"{selected_cc_summary} - Alt Kalemler Dağılım Grafiği (K€)",
+                    df_cc_toplam_nature, x='Performance', y='Nature', orientation='h',
+                    title=f"{selected_cc_summary} - Alt Kalemlerin Net Dağılımı (K€)",
                     template="plotly_white"
                 )
                 fig_cc_nature.update_layout(
-                    height=380,
-                    margin=dict(l=10, r=10, t=50, b=10),
-                    font=dict(size=11),
+                    height=350,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-                    bargap=0.3,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
                 )
                 st.plotly_chart(fig_cc_nature, width="stretch")
         else:
@@ -308,7 +309,7 @@ if masse_list or cc_list or fip_list:
     with tab4:
         df_f_raw = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw.empty:
-            st.subheader("🛠️ Cost Center Bazlı Alt Masraf Kalemleri Arama ve İnceleme")
+            st.subheader("🛠️ Cost Center Bazlı Alt Masraf Kalemleri")
             unique_ccs = sorted(df_f_raw['Cost_Center'].dropna().unique().tolist())
             selected_cc = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_ccs, key="cc_fip_select")
             
@@ -329,22 +330,21 @@ if masse_list or cc_list or fip_list:
                     if len(piv_fip_cc) > 1:
                         piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc[col].iloc[:-1].sum()
                 
-                st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri Performans Özeti (K€)")
+                st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri (K€)")
                 formatli_tablo_goster(piv_fip_cc)
                 
+                df_f_toplam_cc = df_filtered.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
                 fig_f_cc = px.bar(
-                    df_filtered, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
-                    title=f"{selected_cc} - Alt Masraf Kalemleri Dağılım Grafiği (K€)",
+                    df_f_toplam_cc, x='Performance', y='Masraf_Kalemi', orientation='h',
+                    title=f"{selected_cc} - FIP Kalemleri Sıralaması (K€)",
                     template="plotly_white"
                 )
                 fig_f_cc.update_layout(
-                    height=480,
-                    margin=dict(l=10, r=10, t=50, b=10),
-                    font=dict(size=11),
+                    height=400,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-                    bargap=0.3,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
                 )
                 st.plotly_chart(fig_f_cc, width="stretch")
         else:
@@ -353,7 +353,7 @@ if masse_list or cc_list or fip_list:
     with tab5:
         df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw_group.empty:
-            st.subheader("📂 FIP Grup Bazlı Detaylı İnceleme (3A, 3B vb.)")
+            st.subheader("📂 FIP Grup Bazlı İnceleme (3A, 3B vb.)")
             
             unique_gruplar = sorted(df_f_raw_group['Grup'].dropna().unique().tolist())
             selected_grup = st.selectbox("İncelemek İstediğiniz FIP Grubunu Seçin:", unique_gruplar, key="grup_select_tab5")
@@ -389,22 +389,21 @@ if masse_list or cc_list or fip_list:
                 piv_grup_detay.loc['TOPLAM', 'Sonuç / Trend'] = g_tr
                 piv_grup_detay.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Grup Toplamı - {g_yr}"
                     
-                st.markdown(f"**{selected_grup}** Grubuna Ait Alt Masraf Kalemleri ve Performans Dağılımı")
+                st.markdown(f"**{selected_grup}** Grubuna Ait Detaylar")
                 formatli_tablo_goster(piv_grup_detay)
                 
+                df_grup_toplam = df_grup_filtered.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
                 fig_grup = px.bar(
-                    df_grup_filtered, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
-                    title=f"{selected_grup} Grubu Kalemlerinin Dağılımı (K€)",
+                    df_grup_toplam, x='Performance', y='Masraf_Kalemi', orientation='h',
+                    title=f"{selected_grup} Grubu Kalemleri (K€)",
                     template="plotly_white"
                 )
                 fig_grup.update_layout(
-                    height=420,
-                    margin=dict(l=10, r=10, t=50, b=10),
-                    font=dict(size=11),
+                    height=380,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-                    bargap=0.3,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
                 )
                 st.plotly_chart(fig_grup, width="stretch")
         else:
@@ -414,21 +413,20 @@ if masse_list or cc_list or fip_list:
         if piv_f is not None:
             st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
             formatli_tablo_goster(piv_f)
-            df_f_chart = pd.concat(fip_list, ignore_index=True).sort_values('Ay_Sira') if fip_list else pd.DataFrame()
+            df_f_chart = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
             if not df_f_chart.empty:
+                df_f_toplam_all = df_f_chart.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
                 fig_f = px.bar(
-                    df_f_chart, x='Performance', y='Masraf_Kalemi', color='Ay', orientation='h',
-                    title="Alt Masraf Kalemleri Dağılım Grafiği (K€)",
+                    df_f_toplam_all, x='Performance', y='Masraf_Kalemi', orientation='h',
+                    title="Tüm Alt Masraf Kalemleri Genel Dağılımı (K€)",
                     template="plotly_white"
                 )
                 fig_f.update_layout(
-                    height=480,
-                    margin=dict(l=10, r=10, t=50, b=10),
-                    font=dict(size=11),
+                    height=420,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
                     yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-                    bargap=0.3,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2')
                 )
                 st.plotly_chart(fig_f, width="stretch")
 
