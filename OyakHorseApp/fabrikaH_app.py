@@ -194,7 +194,7 @@ def pivot_tablo_olustur(veriler, index_col):
 
     return piv, df_concat
 
-# --- SIDEBAR (Akıllı Otomatik Yönlendirmeli Panel) ---
+# --- SIDEBAR (Kontrollü ve Akıllı Yükleme Paneli) ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
 
 veri_tipi = st.sidebar.radio(
@@ -204,25 +204,50 @@ veri_tipi = st.sidebar.radio(
 )
 
 uploaded_files = st.sidebar.file_uploader(
-    "Excel Dosyalarını Yükleyin (Akıllı Sınıflandırma)", 
+    "Excel Dosyalarını Yükleyin", 
     type=["xlsx", "xls"], 
     accept_multiple_files=True,
     key="global_uploader"
 )
 
-# Akıllı Otomatik Dosya Ayrıştırma ve Kaydetme
+# Dosya İşleme, Yanlış Mod ve Mükerrer Kontrolleri
 if uploaded_files:
+    is_cumul_mode = "Kümülatif" in veri_tipi
+    
     for u_file in uploaded_files:
-        dosya_adi_lower = u_file.name.lower()
-        # Eğer dosya adında cumul veya kümülatif geçiyorsa otomatik kümüle, yoksa aylık klasörüne at
-        if "cumul" in dosya_adi_lower or "kumul" in dosya_adi_lower:
-            hedef_klasor = CUMUL_DIR
-        else:
-            hedef_klasor = MONTHLY_DIR
+        f_name_lower = u_file.name.lower()
+        
+        # 1. Mod Uyumluluk Kontrolü (Yanlış yere yükleme engeli)
+        dosya_tipi_kumul_mu = ("cumul" in f_name_lower or "kümül" in f_name_lower)
+        
+        if is_cumul_mode and not dosya_tipi_kumul_mu:
+            st.sidebar.error(f"⚠️ '{u_file.name}' bir Aylık (Monthly) dosyasıdır! Lütfen 'Aylık' modunu seçip oraya yükleyin.")
+            continue
+        elif not is_cumul_mode and dosya_tipi_kumul_mu:
+            st.sidebar.error(f"⚠️ '{u_file.name}' bir Kümülatif dosyasıdır! Lütfen 'Kümülatif' modunu seçip oraya yükleyin.")
+            continue
             
-        file_path = os.path.join(hedef_klasor, u_file.name)
-        with open(file_path, "wb") as f:
-            f.write(u_file.getbuffer())
+        # Hedef Klasör Belirleme
+        hedef_klasor = CUMUL_DIR if is_cumul_mode else MONTHLY_DIR
+        
+        # 2. Mükerrer (Aynı Ay) Kontrolü
+        yeni_ay_no, yeni_ay_adi = ay_bilgisi_al(u_file.name)
+        mevcut_dosyalar = os.listdir(hedef_klasor)
+        
+        ay_cakismasi_var = False
+        for m_dosya in mevcut_dosyalar:
+            m_ay_no, _ = ay_bilgisi_al(m_dosya)
+            if yeni_ay_no != 99 and m_ay_no == yeni_ay_no:
+                ay_cakismasi_var = True
+                break
+                
+        if ay_cakismasi_var:
+            st.sidebar.warning(f"⚠️ **{yeni_ay_adi}** ayına ait dosya zaten sistemde mevcut! Aynı aya ait ikinci bir dosya yüklenemez.")
+        else:
+            file_path = os.path.join(hedef_klasor, u_file.name)
+            with open(file_path, "wb") as f:
+                f.write(u_file.getbuffer())
+            st.sidebar.success(f"✅ Başarıyla eklendi: {u_file.name}")
 
 # Seçilen moda göre ilgili klasördeki dosyaları listele
 aktif_klasor = CUMUL_DIR if "Kümülatif" in veri_tipi else MONTHLY_DIR
@@ -232,7 +257,7 @@ if saved_files:
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"📋 **{veri_tipi} Yüklü Dosyalar:**")
     
-    # Tek tek dosya silme özelliği
+    # Tek tek dosya silme
     for f_path in saved_files:
         f_name = os.path.basename(f_path)
         col_name, col_btn = st.sidebar.columns([4, 1])
