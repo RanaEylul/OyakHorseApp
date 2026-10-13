@@ -492,9 +492,14 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_m)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Ana Kalemler Performans Grafiği")
+                st.subheader("📈 Ana Kalemler Renkli Performans Dağılımı")
                 df_m_melt = df_m_all.melt(id_vars=['Kalem', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
-                fig_m = px.bar(df_m_melt, x='Kalem', y='Deger', color='Ay', barmode='group', title="Ana Kalemler Aylık Performans Dağılımı")
+                fig_m = px.bar(
+                    df_m_melt, x='Kalem', y='Deger', color='Kalem', 
+                    barmode='group', title="Ana Kalemlere Göre Renkli Dağılım",
+                    color_discrete_sequence=px.colors.qualitative.Set2
+                )
+                fig_m.update_layout(showlegend=False)
                 st.plotly_chart(fig_m, use_container_width=True)
 
     with tab2:
@@ -503,9 +508,14 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_c)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Cost Center Yönetici Özet Grafiği")
+                st.subheader("📈 Cost Center Yönetici Renkli Dağılım Grafiği")
                 df_c_melt = df_c_all.melt(id_vars=['Cost_Center', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
-                fig_c = px.bar(df_c_melt, x='Cost_Center', y='Deger', color='Ay', barmode='group', title="Cost Center Aylık Dağılımı")
+                fig_c = px.bar(
+                    df_c_melt, x='Cost_Center', y='Deger', color='Cost_Center',
+                    barmode='group', title="Cost Center Bazlı Renkli Performans Karşılaştırması",
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_c.update_layout(showlegend=False)
                 st.plotly_chart(fig_c, use_container_width=True)
 
     with tab3:
@@ -529,7 +539,7 @@ if masse_list or cc_list or fip_list:
                 piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_cc_nature)
             
-            # --- TÜMÜNÜ GÖSTERME KISMI (HER COST CENTER İÇİN AYRI TEMİZ TABLO GÖRÜNÜMÜ) ---
+            # --- TÜMÜNÜ GÖSTERME KISMI ---
             st.markdown("---")
             st.markdown("### 📋 Tüm Cost Center Numaraları ve Mod Detayları (Genel Görünüm)")
             for cc_no in unique_cc_summary:
@@ -550,8 +560,12 @@ if masse_list or cc_list or fip_list:
 
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Cost Center Alt Kırılımları Grafiği")
-                fig_all_cc = px.bar(df_c_raw, x='Cost_Center', y='Performance', color='Nature', barmode='group', title="Cost Center ve Nature Bazlı Dağılım")
+                st.subheader("📈 Cost Center & Nature Bazlı Canlı Renk Grafiği")
+                fig_all_cc = px.bar(
+                    df_c_raw, x='Cost_Center', y='Performance', color='Nature',
+                    barmode='group', title="Cost Center ve Nature Dağılımı (Çok Renkli)",
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
                 st.plotly_chart(fig_all_cc, use_container_width=True)
 
     with tab4:
@@ -634,8 +648,13 @@ if masse_list or cc_list or fip_list:
 
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 FIP Grup Dağılım Grafiği")
-                fig_grup = px.bar(df_f_raw_group, x='Grup', y='Performance', color='Ay', barmode='group', title="FIP Grupları Aylık Performans Dağılımı")
+                st.subheader("📈 FIP Grup Çok Renkli Performans Dağılımı")
+                fig_grup = px.bar(
+                    df_f_raw_group, x='Grup', y='Performance', color='Grup',
+                    barmode='group', title="FIP Grupları Renkli Dağılım Analizi",
+                    color_discrete_sequence=px.colors.qualitative.Vivid
+                )
+                fig_grup.update_layout(showlegend=False)
                 st.plotly_chart(fig_grup, use_container_width=True)
 
     with tab6:
@@ -644,9 +663,14 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_f)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Alt Masraf Kalemleri Grafiği")
+                st.subheader("📈 Alt Masraf Kalemleri Canlı Renkli Grafiği")
                 df_f_melt = df_f_all.melt(id_vars=['Masraf_Kalemi', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
-                fig_f = px.bar(df_f_melt, x='Masraf_Kalemi', y='Deger', color='Ay', barmode='group', title="Alt Masraf Kalemleri Karşılaştırması")
+                fig_f = px.bar(
+                    df_f_melt, x='Masraf_Kalemi', y='Deger', color='Masraf_Kalemi',
+                    barmode='group', title="Alt Masraf Kalemleri Renkli Karşılaştırması",
+                    color_discrete_sequence=px.colors.qualitative.Safe
+                )
+                fig_f.update_layout(showlegend=False)
                 st.plotly_chart(fig_f, use_container_width=True)
 
     # --- VTU ÖZET ANALİZİ ---
@@ -709,8 +733,12 @@ if masse_list or cc_list or fip_list:
 
                 if not is_cumul_mode:
                     st.markdown("---")
-                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Grafiği")
-                    fig_l = px.bar(df_loupes_comb, x='Proje', y=[c for c in df_loupes_comb.columns if 'REEL' in c], barmode='group', title="Loupes Proje Gerçekleşen Dağılımı")
+                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Çok Renkli Grafiği")
+                    fig_l = px.bar(
+                        df_loupes_comb, x='Proje', y=[c for c in df_loupes_comb.columns if 'REEL' in c], 
+                        barmode='group', title="Loupes Proje Gerçekleşen Dağılımı (Çok Renkli)",
+                        color_discrete_sequence=px.colors.qualitative.Prism
+                    )
                     st.plotly_chart(fig_l, use_container_width=True)
             else:
                 st.info("Yüklenen dosyalarda Loupes sayfası verisi bulunamadı.")
