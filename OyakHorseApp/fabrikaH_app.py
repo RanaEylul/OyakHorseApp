@@ -194,47 +194,58 @@ def pivot_tablo_olustur(veriler, index_col):
 
     return piv, df_concat
 
-# --- SIDEBAR (İzole Edilmiş Mod ve Dosya Paneli) ---
+# --- SIDEBAR (Akıllı Otomatik Yönlendirmeli Panel) ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
 
 veri_tipi = st.sidebar.radio(
-    "İşlem Yapılacak Veri Modunu Seçin:",
+    "Görüntülenecek Veri Modunu Seçin:",
     ["📊 Kümülatif (Cumul)", "📅 Aylık (Monthly)"],
     key="veri_tipi_secim"
 )
 
-if "Kümülatif" in veri_tipi:
-    aktif_klasor = CUMUL_DIR
-    uploader_key = "uploader_cumul"
-    temizle_key = "btn_clear_cumul"
-else:
-    aktif_klasor = MONTHLY_DIR
-    uploader_key = "uploader_monthly"
-    temizle_key = "btn_clear_monthly"
-
 uploaded_files = st.sidebar.file_uploader(
-    f"{veri_tipi} Excel Dosyalarını Yükleyin", 
+    "Excel Dosyalarını Yükleyin (Akıllı Sınıflandırma)", 
     type=["xlsx", "xls"], 
     accept_multiple_files=True,
-    key=uploader_key
+    key="global_uploader"
 )
 
+# Akıllı Otomatik Dosya Ayrıştırma ve Kaydetme
 if uploaded_files:
     for u_file in uploaded_files:
-        file_path = os.path.join(aktif_klasor, u_file.name)
+        dosya_adi_lower = u_file.name.lower()
+        # Eğer dosya adında cumul veya kümülatif geçiyorsa otomatik kümüle, yoksa aylık klasörüne at
+        if "cumul" in dosya_adi_lower or "kumul" in dosya_adi_lower:
+            hedef_klasor = CUMUL_DIR
+        else:
+            hedef_klasor = MONTHLY_DIR
+            
+        file_path = os.path.join(hedef_klasor, u_file.name)
         with open(file_path, "wb") as f:
             f.write(u_file.getbuffer())
 
+# Seçilen moda göre ilgili klasördeki dosyaları listele
+aktif_klasor = CUMUL_DIR if "Kümülatif" in veri_tipi else MONTHLY_DIR
 saved_files = [os.path.join(aktif_klasor, f) for f in os.listdir(aktif_klasor) if f.lower().endswith(('.xlsx', '.xls'))]
 
 if saved_files:
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f"📋 **{veri_tipi} Yüklü Dosyalar ({len(saved_files)}):**")
+    st.sidebar.markdown(f"📋 **{veri_tipi} Yüklü Dosyalar:**")
+    
+    # Tek tek dosya silme özelliği
     for f_path in saved_files:
-        st.sidebar.text(f"• {os.path.basename(f_path)}")
+        f_name = os.path.basename(f_path)
+        col_name, col_btn = st.sidebar.columns([4, 1])
+        col_name.text(f"• {f_name}")
+        if col_btn.button("❌", key=f"del_{aktif_klasor}_{f_name}"):
+            try:
+                os.remove(f_path)
+                st.rerun()
+            except Exception:
+                pass
         
     st.sidebar.markdown("")
-    if st.sidebar.button(f"🗑️ {veri_tipi} Tüm Dosyaları Temizle", key=temizle_key):
+    if st.sidebar.button(f"🗑️ {veri_tipi} Tümünü Temizle", key=f"clear_all_{aktif_klasor}"):
         for f in saved_files:
             try:
                 os.remove(f)
