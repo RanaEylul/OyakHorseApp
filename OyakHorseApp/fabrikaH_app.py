@@ -156,10 +156,10 @@ def loupes_sayfasini_oku_tum_aylar(saved_files_list):
         if last_ay and f"{last_ay} - Sapma" in row:
             fark = row[f"{last_ay} - Sapma"]
             if fark > 0.1:
-                t_list.append("▼ Bütçe Aşımı")
+                t_list.append("▼ Bütçe Aşımı (Risk)")
                 y_list.append(f"{last_ay} ayında bütçe aşıldı.")
             elif fark < -0.1:
-                t_list.append("▲ Tasarruf")
+                t_list.append("▲ Tasarruf (İyi)")
                 y_list.append(f"{last_ay} ayında tasarruf sağlandı.")
             else:
                 t_list.append("➔ Kontrol Altında")
@@ -254,9 +254,9 @@ def vtu_sayfasini_oku_tum_aylar(saved_files_list):
             if last_ay and f"{last_ay} - Sapma" in row:
                 fark = row[f"{last_ay} - Sapma"]
                 if fark > 5:
-                    t_ozet.append("▼ Bütçe Aşımı"); y_ozet.append(f"{last_ay} ayında bütçe aşıldı.")
+                    t_ozet.append("▼ Bütçe Aşımı (Risk)"); y_ozet.append(f"{last_ay} ayında bütçe aşıldı.")
                 elif fark < -5:
-                    t_ozet.append("▲ Güçlü Tasarruf"); y_ozet.append(f"{last_ay} ayında olumlu tasarruf.")
+                    t_ozet.append("▲ Güçlü Tasarruf (İyi)"); y_ozet.append(f"{last_ay} ayında olumlu tasarruf.")
                 else:
                     t_ozet.append("➔ Kontrol Altında"); y_ozet.append("Bütçeye paralel seyrediyor.")
             else:
@@ -283,9 +283,9 @@ def vtu_sayfasini_oku_tum_aylar(saved_files_list):
             if last_ay and f"{last_ay} - Sapma" in row:
                 fark = row[f"{last_ay} - Sapma"]
                 if fark > 2:
-                    t_detay.append("▼ Maliyet Artışı"); y_detay.append(f"{last_ay} harcaması yüksek.")
+                    t_detay.append("▼ Maliyet Artışı (Risk)"); y_detay.append(f"{last_ay} harcaması yüksek.")
                 elif fark < -2:
-                    t_detay.append("▲ İyileşme"); y_detay.append(f"{last_ay} tasarruflu.")
+                    t_detay.append("▲ İyileşme / Tasarruf"); y_detay.append(f"{last_ay} tasarruflu.")
                 else:
                     t_detay.append("➔ Stabil"); y_detay.append("Kontrol altında.")
             else:
@@ -310,11 +310,11 @@ def trend_ve_yorum_uret(row, ay_kolonlari):
     if son_ay > 50:
         return '▼ Yüksek Risk / Bütçe Aşımı', "Maliyetler bütçenin oldukça üzerine çıktı."
     elif son_ay < -50:
-        return '▲ Güçlü Tasarruf', "Ciddi oranda olumlu sapma / tasarruf sağlandı."
+        return '▲ Güçlü Tasarruf (İyi)', "Ciddi oranda olumlu sapma / tasarruf sağlandı."
     elif son_ay < onceki_ay and son_ay < 0:
-        return '▲ İyileşme Eğilimi', "Tasarruf miktarı artıyor, performans olumlu."
+        return '▲ İyileşme / Tasarruf Artıyor', "Tasarruf miktarı artıyor, performans olumlu."
     elif son_ay > onceki_ay and son_ay > 0:
-        return '▼ Maliyet Artışı', "Harcamalarda olumsuz yönde artış var."
+        return '▼ Maliyet Artışı (Risk)', "Harcamalarda olumsuz yönde artış var."
     elif abs(son_ay - onceki_ay) < 10:
         return '➔ Kontrol Altında', "Stabil bir maliyet seyri izleniyor."
     else:
@@ -322,12 +322,12 @@ def trend_ve_yorum_uret(row, ay_kolonlari):
 
 def renk_stili_ver(val):
     val_str = str(val)
-    if "▲" in val_str:
-        return 'color: #2e7d32; font-weight: bold;'
-    elif "▼" in val_str:
-        return 'color: #c62828; font-weight: bold;'
+    if "▲" in val_str or "Tasarruf" in val_str or "İyileşme" in val_str:
+        return 'color: #2e7d32; font-weight: bold;'  # Pozitif (Yeşil - İyi)
+    elif "▼" in val_str or "Risk" in val_str or "Aşımı" in val_str or "Artışı" in val_str:
+        return 'color: #c62828; font-weight: bold;'  # Negatif (Kırmızı - Risk)
     elif "➔" in val_str:
-        return 'color: #ef6c00; font-weight: bold;'
+        return 'color: #ef6c00; font-weight: bold;'  # Turuncu - Stabil
     return ''
 
 def formatli_tablo_goster(piv_df):
@@ -492,12 +492,12 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_m)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Ana Kalemler (+ / -) Durum Grafiği")
-                df_m_all['Durum'] = df_m_all['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                st.subheader("📈 Ana Kalemler Tasarruf / Bütçe Aşımı Grafiği")
+                df_m_all['Durum'] = df_m_all['Performance'].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
                 fig_m = px.bar(
                     df_m_all, x='Kalem', y='Performance', color='Durum',
-                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'},
-                    title="Ana Kalemler Artı / Eksi (Pozitif / Negatif) Performans Dağılımı"
+                    color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'},
+                    title="Ana Kalemler Tasarruf (-) ve Bütçe Aşımı (+) Dağılımı"
                 )
                 st.plotly_chart(fig_m, use_container_width=True)
 
@@ -507,12 +507,12 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_c)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Cost Center Yönetici Özet (+ / -) Grafiği")
-                df_c_all['Durum'] = df_c_all['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                st.subheader("📈 Cost Center Yönetici Özet Grafiği")
+                df_c_all['Durum'] = df_c_all['Performance'].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
                 fig_c = px.bar(
                     df_c_all, x='Cost_Center', y='Performance', color='Durum',
-                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'},
-                    title="Cost Center Artı / Eksi (Pozitif / Negatif) Performans Dağılımı"
+                    color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'},
+                    title="Cost Center Tasarruf (-) ve Bütçe Aşımı (+) Dağılımı"
                 )
                 st.plotly_chart(fig_c, use_container_width=True)
 
@@ -558,12 +558,12 @@ if masse_list or cc_list or fip_list:
 
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Cost Center & Nature Artı / Eksi Dağılım Grafiği")
-                df_c_raw['Durum'] = df_c_raw['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                st.subheader("📈 Cost Center & Nature Tasarruf / Aşım Grafiği")
+                df_c_raw['Durum'] = df_c_raw['Performance'].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
                 fig_all_cc = px.bar(
                     df_c_raw, x='Cost_Center', y='Performance', color='Durum',
-                    barmode='group', title="Cost Center ve Nature Artı / Eksi Dağılımı",
-                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
+                    barmode='group', title="Cost Center ve Nature Dağılımı",
+                    color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'}
                 )
                 st.plotly_chart(fig_all_cc, use_container_width=True)
 
@@ -647,12 +647,12 @@ if masse_list or cc_list or fip_list:
 
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 FIP Grup Artı / Eksi Performans Dağılımı")
-                df_f_raw_group['Durum'] = df_f_raw_group['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                st.subheader("📈 FIP Grup Tasarruf / Aşım Dağılımı")
+                df_f_raw_group['Durum'] = df_f_raw_group['Performance'].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
                 fig_grup = px.bar(
                     df_f_raw_group, x='Grup', y='Performance', color='Durum',
-                    barmode='group', title="FIP Grupları Artı / Eksi Dağılımı",
-                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
+                    barmode='group', title="FIP Grupları Tasarruf ve Aşım Dağılımı",
+                    color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'}
                 )
                 st.plotly_chart(fig_grup, use_container_width=True)
 
@@ -662,13 +662,13 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_f)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Alt Masraf Kalemleri Artı / Eksi Grafiği")
-                df_f_all['Durum'] = df_f_all['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                st.subheader("📈 Alt Masraf Kalemleri Tasarruf / Aşım Grafiği")
+                df_f_all['Durum'] = df_f_all['Performance'].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
                 df_f_melt = df_f_all.melt(id_vars=['Masraf_Kalemi', 'Ay', 'Durum'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
                 fig_f = px.bar(
                     df_f_melt, x='Masraf_Kalemi', y='Deger', color='Durum',
-                    barmode='group', title="Alt Masraf Kalemleri Artı / Eksi Dağılımı",
-                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
+                    barmode='group', title="Alt Masraf Kalemleri Tasarruf ve Aşım Dağılımı",
+                    color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'}
                 )
                 st.plotly_chart(fig_f, use_container_width=True)
 
@@ -732,16 +732,15 @@ if masse_list or cc_list or fip_list:
 
                 if not is_cumul_mode:
                     st.markdown("---")
-                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Artı / Eksi Grafiği")
-                    # İlk REEL sütununa göre artı eksi renklendirme
+                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Grafiği")
                     reel_col = [c for c in df_loupes_comb.columns if 'REEL' in c]
                     if reel_col:
                         c_adi = reel_col[0]
-                        df_loupes_comb['Durum'] = df_loupes_comb[c_adi].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                        df_loupes_comb['Durum'] = df_loupes_comb[c_adi].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
                         fig_l = px.bar(
                             df_loupes_comb, x='Proje', y=c_adi, color='Durum',
-                            barmode='group', title="Loupes Proje Gerçekleşen Dağılımı Artı / Eksi",
-                            color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
+                            barmode='group', title="Loupes Proje Gerçekleşen Dağılımı",
+                            color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'}
                         )
                         st.plotly_chart(fig_l, use_container_width=True)
             else:
