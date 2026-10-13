@@ -115,13 +115,37 @@ def vtu_sayfasini_oku(file_source):
         ]
         
         for base_col, hat_adi in mappings:
-            # Üst Özet Tablo (Nature kaldırıldı, REEL ve BUDGET yanına EUR eklendi)
+            # Üst Özet Tablo
             sub_df = df.iloc[3:8, base_col+3:base_col+6].copy()
             sub_df.columns = ['NATURE', 'REEL (EUR)', 'BUDGET (EUR)']
             sub_df = sub_df.dropna(subset=['NATURE'])
             sub_df['REEL (EUR)'] = pd.to_numeric(sub_df['REEL (EUR)'], errors='coerce').fillna(0)
             sub_df['BUDGET (EUR)'] = pd.to_numeric(sub_df['BUDGET (EUR)'], errors='coerce').fillna(0)
             sub_df['Sapma'] = sub_df['REEL (EUR)'] - sub_df['BUDGET (EUR)']
+            
+            # Üst Özet için Yorum ve Trend
+            t_ozet, y_ozet = [], []
+            for _, row in sub_df.iterrows():
+                fark = row['Sapma']
+                if "Total" in str(row['NATURE']):
+                    if fark > 0:
+                        t_ozet.append("▼ Bütçe Aşımı")
+                        y_ozet.append("Genel toplam bütçenin üzerinde.")
+                    else:
+                        t_ozet.append("▲ Bütçe Altında")
+                        y_ozet.append("Genel toplam bütçeye göre olumlu.")
+                else:
+                    if fark > 5:
+                        t_ozet.append("▼ Yüksek Sapma")
+                        y_ozet.append("Kalem bütçesini aştı.")
+                    elif fark < -5:
+                        t_ozet.append("▲ Güçlü Tasarruf")
+                        y_ozet.append("Olumlu tasarruf sağlandı.")
+                    else:
+                        t_ozet.append("➔ Kontrol Altında")
+                        y_ozet.append("Bütçeye paralel seyrediyor.")
+            sub_df['Sonuç / Trend'] = t_ozet
+            sub_df['Yönetici Analiz Yorumu'] = y_ozet
             
             # Alt Detay Tablo (GM174MOD vb.)
             detay_df = df.iloc[13:34, [base_col+1, base_col+2, base_col+3, base_col+4, base_col+5]].copy()
@@ -445,7 +469,14 @@ if masse_list or cc_list or fip_list:
                     
                     st.markdown(f"### 📌 **{secilen_hat}** - Üst Özet Tablo")
                     format_dict = {'REEL (EUR)': '{:,.2f}', 'BUDGET (EUR)': '{:,.2f}', 'Sapma': '{:+,.2f}'}
-                    st.dataframe(veri_paket["ozet"].style.format(format_dict, na_rep=""), width="stretch", hide_index=True)
+                    
+                    ozet_styler = veri_paket["ozet"].style.format(format_dict, na_rep="")
+                    if 'Sonuç / Trend' in veri_paket["ozet"].columns:
+                        try:
+                            ozet_styler = ozet_styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
+                        except AttributeError:
+                            ozet_styler = ozet_styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
+                    st.dataframe(ozet_styler, width="stretch", hide_index=True)
                     
                     st.markdown(f"### 🔍 **{secilen_hat}** Alt Detay Operasyonları (GM174MOD, Volants vb.)")
                     detay_styler = veri_paket["detay"].style.format(format_dict, na_rep="")
@@ -460,4 +491,3 @@ if masse_list or cc_list or fip_list:
 
 else:
     st.info(f"💡 `{veri_tipi}` modunda analiz tablolarının oluşması için sol panelden ilgili Excel dosyalarınızı yükleyin.")
-   
