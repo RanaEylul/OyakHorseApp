@@ -108,35 +108,38 @@ def vtu_sayfasini_oku(file_source):
         df = pd.read_excel(file_source, sheet_name=vtu_sheet)
         blocks = {}
         
-        # 1. Satır Blokları (B4D, HR 16, HR 18 vb.)
+        # 1. Üst Satır Blokları (B4D, HR 16, HR 18 vb.)
         for col_idx in range(df.shape[1]):
             val = df.iloc[0, col_idx]
             if pd.notna(val) and isinstance(val, str) and val.strip() not in ['GM', 'VTU']:
                 block_name = val.strip()
+                code_val = str(df.iloc[2, col_idx+2]) if col_idx+2 < df.shape[1] else ""
+                full_title = f"{block_name} ({code_val})" if code_val and code_val != "nan" else block_name
+                
                 sub_df = df.iloc[1:8, col_idx:col_idx+6].copy()
-                sub_df.columns = ['C0', 'C1', 'Nature', 'REEL', 'BUDGET', 'C5']
-                sub_df = sub_df[['Nature', 'REEL', 'BUDGET']].dropna(subset=['Nature'])
-                sub_df = sub_df[sub_df['Nature'].astype(str).str.contains('MOD|MOS|FIP|Depreciation|Total', case=False, na=False)]
+                sub_df.columns = ['C0', 'C1', 'NATURE', 'REEL', 'BUDGET', 'C5']
+                sub_df = sub_df[['NATURE', 'REEL', 'BUDGET']].dropna(subset=['NATURE'])
+                sub_df = sub_df[sub_df['NATURE'].astype(str).str.contains('MOD|MOS|FIP|Depreciation|Total', case=False, na=False)]
+                
                 sub_df['REEL'] = pd.to_numeric(sub_df['REEL'], errors='coerce').fillna(0)
                 sub_df['BUDGET'] = pd.to_numeric(sub_df['BUDGET'], errors='coerce').fillna(0)
                 sub_df['Sapma (Reel - Budget)'] = sub_df['REEL'] - sub_df['BUDGET']
                 
-                # Yorum ve Trend üretimi
                 t_list, y_list = [], []
                 for _, row in sub_df.iterrows():
                     fark = row['Sapma (Reel - Budget)']
-                    if "Total" in str(row['Nature']):
+                    if "Total" in str(row['NATURE']):
                         if fark > 0:
                             t_list.append("▼ Bütçe Aşımı")
                             y_list.append("Toplam maliyet bütçenin üzerinde.")
                         else:
-                            t_list.append("▲ Bütçe Altında / Tasarruf")
+                            t_list.append("▲ Bütçe Altında")
                             y_list.append("Toplam maliyet bütçeye göre olumlu.")
                     else:
-                        if fark > 10:
+                        if fark > 5:
                             t_list.append("▼ Yüksek Sapma")
                             y_list.append("Kalem bazında bütçe aşımı var.")
-                        elif fark < -10:
+                        elif fark < -5:
                             t_list.append("▲ Güçlü Tasarruf")
                             y_list.append("Kalem bazında olumlu tasarruf.")
                         else:
@@ -144,16 +147,25 @@ def vtu_sayfasini_oku(file_source):
                             y_list.append("Bütçeye yakın seyrediyor.")
                 sub_df['Sonuç / Trend'] = t_list
                 sub_df['Yönetici Analiz Yorumu'] = y_list
-                blocks[block_name] = sub_df
+                blocks[full_title] = sub_df
 
-        # 2. GM17 (B MOTOR vb.) Blokları
+        # 2. GM17 Alt Satır Blokları (B MOTOR, JJ-MOT ASS H4M 632, S9-MOT ASS H5P 260 vb.)
         for col_idx in range(df.shape[1]):
             val = df.iloc[11, col_idx]
             if pd.notna(val) and isinstance(val, str) and val.strip() not in ['GM', 'VTU', 'R2026_VTU', 'B2026_VTU', 'EUR']:
                 block_name = val.strip()
-                sub_df = df.iloc[13:34, [col_idx-1 if col_idx>0 else 0, col_idx, col_idx+2, col_idx+3, col_idx+4]].copy()
-                sub_df.columns = ['Sub_Project', 'Description', 'Nature', 'REEL', 'BUDGET']
-                sub_df = sub_df.dropna(subset=['Nature'])
+                code_val = str(df.iloc[12, col_idx]) if col_idx < df.shape[1] else ""
+                full_title = f"{block_name} ({code_val})" if code_val and code_val != "nan" else block_name
+                
+                # Görseldeki birebir sütun yapısını çekiyoruz: Kod, GM (Tanım), NATURE, REEL, BUDGET
+                c_idx = col_idx - 1 if col_idx > 0 else 0
+                sub_df = df.iloc[13:34, [c_idx, c_idx+1, c_idx+2, c_idx+3, c_idx+4]].copy()
+                sub_df.columns = ['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE', 'REEL', 'BUDGET']
+                
+                # Boş satırları temizle
+                sub_df = sub_df.dropna(subset=['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE', 'REEL', 'BUDGET'], how='all')
+                sub_df['NATURE'] = sub_df['NATURE'].fillna('')
+                
                 sub_df['REEL'] = pd.to_numeric(sub_df['REEL'], errors='coerce').fillna(0)
                 sub_df['BUDGET'] = pd.to_numeric(sub_df['BUDGET'], errors='coerce').fillna(0)
                 sub_df['Sapma (Reel - Budget)'] = sub_df['REEL'] - sub_df['BUDGET']
@@ -161,26 +173,30 @@ def vtu_sayfasini_oku(file_source):
                 t_list, y_list = [], []
                 for _, row in sub_df.iterrows():
                     fark = row['Sapma (Reel - Budget)']
-                    if "TOTAL" in str(row['Description']).upper() or "TOTAL" in str(row['Nature']).upper():
+                    kod_str = str(row['KOD / BAŞLIK']).upper()
+                    gm_str = str(row['GM (TANIM)']).upper()
+                    
+                    if "GRAND TOTAL" in kod_str or "TOTAL" in kod_str or "TOTAL" in gm_str:
                         if fark > 0:
                             t_list.append("▼ Bütçe Aşımı")
-                            y_list.append("Grup toplamı bütçeyi aştı.")
+                            y_list.append("Grup toplam maliyeti bütçeyi aştı.")
                         else:
-                            t_list.append("▲ Tasarruf")
-                            y_list.append("Grup toplamı bütçe altında.")
+                            t_list.append("▲ Bütçe Altında")
+                            y_list.append("Grup toplamı bütçe altında (olumlu).")
                     else:
-                        if fark > 5:
+                        if fark > 2:
                             t_list.append("▼ Maliyet Artışı")
                             y_list.append("Beklenenden yüksek harcama.")
-                        elif fark < -5:
-                            t_list.append("▲ İyileşme")
+                        elif fark < -2:
+                            t_list.append("▲ İyileşme / Tasarruf")
                             y_list.append("Tasarruf sağlandı.")
                         else:
                             t_list.append("➔ Stabil")
-                            y_list.append("Kontrol altında.")
+                            y_list.append("Bütçeye uygun kontrol altında.")
+                            
                 sub_df['Sonuç / Trend'] = t_list
                 sub_df['Yönetici Analiz Yorumu'] = y_list
-                blocks[block_name] = sub_df
+                blocks[full_title] = sub_df
 
         return blocks
     except Exception:
@@ -483,7 +499,7 @@ if masse_list or cc_list or fip_list:
     # --- VTU ÖZET ANALİZİ (SADECE MONTHLY MODUNDA) ---
     if tab_vtu is not None:
         with tab_vtu:
-            st.subheader("📊 VTU Proje / Hat ve GM17 Detaylı Analizleri")
+            st.subheader("📊 VTU Proje / Hat ve B MOTOR Detaylı Performans Analizi")
             
             tum_vtu_bloklari = {}
             for file_path in saved_files:
@@ -492,27 +508,45 @@ if masse_list or cc_list or fip_list:
                 
             if tum_vtu_bloklari:
                 secilen_hat = st.selectbox(
-                    "İncelemek İstediğiniz Hat / GM17 Projesini Seçin:", 
+                    "İncelemek İstediğiniz Proje / Hat veya B MOTOR Kodunu Seçin:", 
                     list(tum_vtu_bloklari.keys()),
                     key="vtu_hat_select"
                 )
                 
                 if secilen_hat:
-                    st.markdown(f"**{secilen_hat}** Hattına Ait Detaylı Tablo ve Yorumlar")
-                    st.dataframe(tum_vtu_bloklari[secilen_hat], width="stretch", hide_index=True)
+                    st.markdown(f"### 📌 **{secilen_hat}** Detaylı Performans Tablosu")
+                    v_df = tum_vtu_bloklari[secilen_hat]
+                    
+                    # Şık Tablo Biçimlendirme
+                    format_dict = {'REEL': '{:,.2f}', 'BUDGET': '{:,.2f}', 'Sapma (Reel - Budget)': '{:+,.2f}'}
+                    styler = v_df.style.format(format_dict, na_rep="")
+                    if 'Sonuç / Trend' in v_df.columns:
+                        try:
+                            styler = styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
+                        except AttributeError:
+                            styler = styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
+                            
+                    st.dataframe(styler, width="stretch", hide_index=True)
                 
                 st.markdown("---")
-                st.subheader("📋 Tüm Hatlar / Projeler Genel Özeti (Toplu Liste)")
+                st.subheader("📋 Tüm VTU Projeleri / Hatları Genel Toplu Özeti")
                 
                 tum_listeler = []
                 for hat_adi, b_df in tum_vtu_bloklari.items():
                     b_copy = b_df.copy()
-                    b_copy.insert(0, 'Hat / Proje', hat_adi)
+                    b_copy.insert(0, 'Proje / Hat', hat_adi)
                     tum_listeler.append(b_copy)
                     
                 if tum_listeler:
                     genel_toplu_df = pd.concat(tum_listeler, ignore_index=True)
-                    st.dataframe(genel_toplu_df, width="stretch", hide_index=True)
+                    format_dict_genel = {'REEL': '{:,.2f}', 'BUDGET': '{:,.2f}', 'Sapma (Reel - Budget)': '{:+,.2f}'}
+                    styler_genel = genel_toplu_df.style.format(format_dict_genel, na_rep="")
+                    if 'Sonuç / Trend' in genel_toplu_df.columns:
+                        try:
+                            styler_genel = styler_genel.map(renk_stili_ver, subset=['Sonuç / Trend'])
+                        except AttributeError:
+                            styler_genel = styler_genel.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
+                    st.dataframe(styler_genel, width="stretch", hide_index=True)
             else:
                 st.info("Yüklenen aylık dosyalar içinde VTU verisi bulunamadı.")
 
