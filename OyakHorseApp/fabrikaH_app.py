@@ -4,6 +4,11 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
+# 📁 Kalıcı Depolama Klasörü Tanımı
+PERSIST_DIR = "uploaded_excel_files"
+if not os.path.exists(PERSIST_DIR):
+    os.makedirs(PERSIST_DIR)
+
 st.set_page_config(page_title="Finansal Performans Özeti", layout="wide")
 
 st.title("📊 Motor Perimetresi Finansal Performans Özeti (K€)")
@@ -188,24 +193,46 @@ def pivot_tablo_olustur(veriler, index_col):
 
     return piv, df_concat
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Kalıcı Dosya Yükleme Paneli) ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
 uploaded_files = st.sidebar.file_uploader("Aylık Excel Dosyalarını Yükleyin (Örn: M06, M07, M08)", type=["xlsx", "xls"], accept_multiple_files=True)
 
-masse_list, cc_list, fip_list = [], [], []
-
+# Yeni yüklenen dosyaları kalıcı klasöre kaydet
 if uploaded_files:
     for u_file in uploaded_files:
+        file_path = os.path.join(PERSIST_DIR, u_file.name)
+        with open(file_path, "wb") as f:
+            f.write(u_file.getbuffer())
+
+# Kayıtlı tüm dosyaları klasörden listele
+saved_files = [os.path.join(PERSIST_DIR, f) for f in os.listdir(PERSIST_DIR) if f.lower().endswith(('.xlsx', '.xls'))]
+
+if saved_files:
+    st.sidebar.markdown(f"✅ **Kayıtlı Dosya Sayısı:** {len(saved_files)}")
+    if st.sidebar.button("🗑️ Kayıtlı Tüm Dosyaları Temizle"):
+        for f in saved_files:
+            try:
+                os.remove(f)
+            except Exception:
+                pass
+        st.rerun()
+
+masse_list, cc_list, fip_list = [], [], []
+
+# Kayıtlı dosyaları işleme al
+if saved_files:
+    for file_path in saved_files:
+        file_name = os.path.basename(file_path)
         try:
-            m = excel_oku(u_file, u_file.name, 'Masse')
-            c = excel_oku(u_file, u_file.name, 'Cost Center')
-            f = excel_oku(u_file, u_file.name, 'FIP')
+            m = excel_oku(file_path, file_name, 'Masse')
+            c = excel_oku(file_path, file_name, 'Cost Center')
+            f = excel_oku(file_path, file_name, 'FIP')
             
             if m is not None and not m.empty: masse_list.append(m)
             if c is not None and not c.empty: cc_list.append(c)
             if f is not None and not f.empty: fip_list.append(f)
         except Exception as e:
-            st.sidebar.error(f"Hata ({u_file.name}): {e}")
+            st.sidebar.error(f"Hata ({file_name}): {e}")
 
 # --- ANA EKRAN ---
 if masse_list or cc_list or fip_list:
