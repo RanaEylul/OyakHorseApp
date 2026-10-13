@@ -515,6 +515,7 @@ if masse_list or cc_list or fip_list:
             unique_cc_summary = sorted(df_c_raw['Cost_Center'].dropna().unique().tolist())
             selected_cc_summary = st.selectbox("Cost Center Seçin:", unique_cc_summary, key="cc_sum")
             if selected_cc_summary:
+                st.markdown(f"**Seçilen Cost Center:** `{selected_cc_summary}`")
                 df_cc_filtered = df_c_raw[df_c_raw['Cost_Center'] == selected_cc_summary]
                 aylar_sirali_cc = df_cc_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
                 piv_cc_nature = df_cc_filtered.pivot_table(index='Nature', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
@@ -528,19 +529,24 @@ if masse_list or cc_list or fip_list:
                 piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_cc_nature)
             
-            # --- TÜMÜNÜ GÖSTERME TABLOSU (Cost Center Ana Başlık, Altında Nature/Mod Detayları) ---
+            # --- TÜMÜNÜ GÖSTERME KISMI (HER COST CENTER İÇİN AYRI TEMİZ TABLO GÖRÜNÜMÜ) ---
             st.markdown("---")
-            st.markdown("### 📋 Tüm Cost Center Listesi ve Mod/Nature Detayları (Genel Görünüm)")
-            aylar_sirali_all_cc = df_c_raw[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-            piv_all_cc = df_c_raw.pivot_table(index=['Cost_Center', 'Nature'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
-            piv_all_cc = piv_all_cc.reindex(columns=[col for col in aylar_sirali_all_cc if col in piv_all_cc.columns])
-            t_all, y_all = [], []
-            for _, row in piv_all_cc.iterrows():
-                tr, yr = trend_ve_yorum_uret(row, list(piv_all_cc.columns))
-                t_all.append(tr); y_all.append(yr)
-            piv_all_cc['Sonuç / Trend'] = t_all
-            piv_all_cc['Yönetici Analiz Yorumu'] = y_all
-            formatli_tablo_goster(piv_all_cc)
+            st.markdown("### 📋 Tüm Cost Center Numaraları ve Mod Detayları (Genel Görünüm)")
+            for cc_no in unique_cc_summary:
+                st.markdown(f"#### 📌 Cost Center: `{cc_no}`")
+                df_tek_cc = df_c_raw[df_c_raw['Cost_Center'] == cc_no]
+                aylar_s_cc = df_tek_cc[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                piv_tek_cc = df_tek_cc.pivot_table(index='Nature', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+                piv_tek_cc = piv_tek_cc.reindex(columns=[col for col in aylar_s_cc if col in piv_tek_cc.columns])
+                piv_tek_cc.loc['TOPLAM'] = piv_tek_cc.sum()
+                t_l, y_l = [], []
+                for _, row in piv_tek_cc.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, list(piv_tek_cc.columns))
+                    t_l.append(tr); y_l.append(yr)
+                piv_tek_cc['Sonuç / Trend'] = t_l
+                piv_tek_cc['Yönetici Analiz Yorumu'] = y_l
+                formatli_tablo_goster(piv_tek_cc)
+                st.markdown("")
 
             if not is_cumul_mode:
                 st.markdown("---")
@@ -555,6 +561,7 @@ if masse_list or cc_list or fip_list:
             unique_ccs = sorted(df_f_raw['Cost_Center'].dropna().unique().tolist())
             selected_cc = st.selectbox("Cost Center Seçin:", unique_ccs, key="cc_fip")
             if selected_cc:
+                st.markdown(f"**Seçilen Cost Center:** `{selected_cc}`")
                 df_filtered = df_f_raw[df_f_raw['Cost_Center'] == selected_cc]
                 aylar_sirali = df_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
                 piv_fip_cc = df_filtered.pivot_table(index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
@@ -568,19 +575,23 @@ if masse_list or cc_list or fip_list:
                 piv_fip_cc['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_fip_cc)
             
-            # --- TÜMÜNÜ GÖSTERME TABLOSU ---
+            # --- TÜMÜNÜ GÖSTERME KISMI ---
             st.markdown("---")
-            st.markdown("### 📋 Tüm Cost Center Bazlı Masraf Kalemleri (Genel Görünüm)")
-            aylar_sirali_all_fip = df_f_raw[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-            piv_all_fip = df_f_raw.pivot_table(index=['Cost_Center', 'Grup', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
-            piv_all_fip = piv_all_fip.reindex(columns=[col for col in aylar_sirali_all_fip if col in piv_all_fip.columns])
-            t_fip_all, y_fip_all = [], []
-            for _, row in piv_all_fip.iterrows():
-                tr, yr = trend_ve_yorum_uret(row, list(piv_all_fip.columns))
-                t_fip_all.append(tr); y_fip_all.append(yr)
-            piv_all_fip['Sonuç / Trend'] = t_fip_all
-            piv_all_fip['Yönetici Analiz Yorumu'] = y_fip_all
-            formatli_tablo_goster(piv_all_fip)
+            st.markdown("### 📋 Tüm Cost Center FIP Detayları (Genel Görünüm)")
+            for cc_no in unique_ccs:
+                st.markdown(f"#### 📌 Cost Center: `{cc_no}`")
+                df_tek_fip = df_f_raw[df_f_raw['Cost_Center'] == cc_no]
+                aylar_s_fip = df_tek_fip[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                piv_tek_fip = df_tek_fip.pivot_table(index=['Grup', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+                piv_tek_fip = piv_tek_fip.reindex(columns=[col for col in aylar_s_fip if col in piv_tek_fip.columns])
+                t_l, y_l = [], []
+                for _, row in piv_tek_fip.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, list(piv_tek_fip.columns))
+                    t_l.append(tr); y_l.append(yr)
+                piv_tek_fip['Sonuç / Trend'] = t_l
+                piv_tek_fip['Yönetici Analiz Yorumu'] = y_l
+                formatli_tablo_goster(piv_tek_fip)
+                st.markdown("")
 
     with tab5:
         df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
@@ -589,6 +600,7 @@ if masse_list or cc_list or fip_list:
             unique_gruplar = sorted(df_f_raw_group['Grup'].dropna().unique().tolist())
             selected_grup = st.selectbox("FIP Grubu Seçin:", unique_gruplar, key="grup_sel")
             if selected_grup:
+                st.markdown(f"**Seçilen FIP Grubu:** `{selected_grup}`")
                 df_grup_filtered = df_f_raw_group[df_f_raw_group['Grup'] == selected_grup]
                 aylar_sirali_grup = df_grup_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
                 piv_grup_detay = df_grup_filtered.pivot_table(index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
@@ -602,19 +614,23 @@ if masse_list or cc_list or fip_list:
                 piv_grup_detay['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_grup_detay)
             
-            # --- TÜMÜNÜ GÖSTERME TABLOSU ---
+            # --- TÜMÜNÜ GÖSTERME KISMI ---
             st.markdown("---")
-            st.markdown("### 📋 Tüm FIP Grup ve Masraf Kalemleri (Genel Görünüm)")
-            aylar_sirali_all_grup = df_f_raw_group[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-            piv_all_grup = df_f_raw_group.pivot_table(index=['Grup', 'Cost_Center', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
-            piv_all_grup = piv_all_grup.reindex(columns=[col for col in aylar_sirali_all_grup if col in piv_all_grup.columns])
-            t_g_all, y_g_all = [], []
-            for _, row in piv_all_grup.iterrows():
-                tr, yr = trend_ve_yorum_uret(row, list(piv_all_grup.columns))
-                t_g_all.append(tr); y_g_all.append(yr)
-            piv_all_grup['Sonuç / Trend'] = t_g_all
-            piv_all_grup['Yönetici Analiz Yorumu'] = y_g_all
-            formatli_tablo_goster(piv_all_grup)
+            st.markdown("### 📋 Tüm FIP Grupları (Genel Görünüm)")
+            for g_adi in unique_gruplar:
+                st.markdown(f"#### 📂 Grup: `{g_adi}`")
+                df_tek_grup = df_f_raw_group[df_f_raw_group['Grup'] == g_adi]
+                aylar_s_grup = df_tek_grup[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                piv_tek_grup = df_tek_grup.pivot_table(index=['Cost_Center', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+                piv_tek_grup = piv_tek_grup.reindex(columns=[col for col in aylar_s_grup if col in piv_tek_grup.columns])
+                t_l, y_l = [], []
+                for _, row in piv_tek_grup.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, list(piv_tek_grup.columns))
+                    t_l.append(tr); y_l.append(yr)
+                piv_tek_grup['Sonuç / Trend'] = t_l
+                piv_tek_grup['Yönetici Analiz Yorumu'] = y_l
+                formatli_tablo_goster(piv_tek_grup)
+                st.markdown("")
 
             if not is_cumul_mode:
                 st.markdown("---")
