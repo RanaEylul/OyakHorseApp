@@ -170,7 +170,7 @@ def loupes_sayfasini_oku_tum_aylar(saved_files_list):
             
     l_comb['Sonuç / Trend'] = t_list
     l_comb['Yönetici Analiz Yorumu'] = y_list
-    return l_comb.reset_index(), aylar_sirali
+    return l_comb.reset_index(), aylar_sirali, df_l_all
 
 def vtu_sayfasini_oku_tum_aylar(saved_files_list):
     vtu_aylik_ozet_list = []
@@ -323,11 +323,11 @@ def trend_ve_yorum_uret(row, ay_kolonlari):
 def renk_stili_ver(val):
     val_str = str(val)
     if "▲" in val_str or "Tasarruf" in val_str or "İyileşme" in val_str:
-        return 'color: #2e7d32; font-weight: bold;'  # Pozitif (Yeşil - İyi)
+        return 'color: #2e7d32; font-weight: bold;'
     elif "▼" in val_str or "Risk" in val_str or "Aşımı" in val_str or "Artışı" in val_str:
-        return 'color: #c62828; font-weight: bold;'  # Negatif (Kırmızı - Risk)
+        return 'color: #c62828; font-weight: bold;'
     elif "➔" in val_str:
-        return 'color: #ef6c00; font-weight: bold;'  # Turuncu - Stabil
+        return 'color: #ef6c00; font-weight: bold;'
     return ''
 
 def formatli_tablo_goster(piv_df):
@@ -717,7 +717,7 @@ if masse_list or cc_list or fip_list:
     if tab_loupes is not None:
         with tab_loupes:
             st.subheader("🔍 Loupes Sayfası Çoklu Ay Karşılaştırma ve Proje Özeti (B4D, HR16, HR18)")
-            df_loupes_comb, aylar_listesi = loupes_sayfasini_oku_tum_aylar(saved_files)
+            df_loupes_comb, aylar_listesi, df_l_all = loupes_sayfasini_oku_tum_aylar(saved_files)
             
             if not df_loupes_comb.empty:
                 format_dict_loupes = {col: "{:+,.2f}" if "Sapma" in col else "{:,.2f}" for col in df_loupes_comb.columns if col not in ['Proje', 'Sonuç / Trend', 'Yönetici Analiz Yorumu']}
@@ -730,19 +730,17 @@ if masse_list or cc_list or fip_list:
                         loupes_styler = loupes_styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
                 st.dataframe(loupes_styler, width="stretch", hide_index=True)
 
-                if not is_cumul_mode:
+                if not is_cumul_mode and not df_l_all.empty:
                     st.markdown("---")
-                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Grafiği")
-                    reel_col = [c for c in df_loupes_comb.columns if 'REEL' in c]
-                    if reel_col:
-                        c_adi = reel_col[0]
-                        df_loupes_comb['Durum'] = df_loupes_comb[c_adi].apply(lambda x: 'Tasarruf (İyi -)' if x < 0 else 'Bütçe Aşımı (Risk +)')
-                        fig_l = px.bar(
-                            df_loupes_comb, x='Proje', y=c_adi, color='Durum',
-                            barmode='group', title="Loupes Proje Gerçekleşen Dağılımı",
-                            color_discrete_map={'Tasarruf (İyi -)': '#2e7d32', 'Bütçe Aşımı (Risk +)': '#c62828'}
-                        )
-                        st.plotly_chart(fig_l, use_container_width=True)
+                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Karşılaştırma Grafiği")
+                    # Doğru veri hazırlığı: Proje bazında REEL ve BUDGET değerleri karşılaştırmalı olarak çiziliyor
+                    df_l_melt = df_l_all.melt(id_vars=['Proje', 'Ay'], value_vars=['REEL', 'BUDGET'], var_name='Metric', value_name='Deger')
+                    fig_l = px.bar(
+                        df_l_melt, x='Proje', y='Deger', color='Metric', barmode='group', facet_col='Ay',
+                        title="Loupes Projeleri Bütçe vs Gerçekleşen Aylık Karşılaştırması",
+                        color_discrete_map={'REEL': '#c62828', 'BUDGET': '#1565c0'}
+                    )
+                    st.plotly_chart(fig_l, use_container_width=True)
             else:
                 st.info("Yüklenen dosyalarda Loupes sayfası verisi bulunamadı.")
 
