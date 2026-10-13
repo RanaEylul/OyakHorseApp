@@ -374,4 +374,153 @@ if masse_list or cc_list or fip_list:
                     template="plotly_white"
                 )
                 fig_cc_nature.update_layout(
-                    height
+                    height=350,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
+                )
+                st.plotly_chart(fig_cc_nature, width="stretch")
+        else:
+            st.info("Cost Center detay verisi bulunamadı.")
+
+    with tab4:
+        df_f_raw = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
+        if not df_f_raw.empty:
+            st.subheader("🛠️ Cost Center Bazlı Alt Masraf Kalemleri")
+            unique_ccs = sorted(df_f_raw['Cost_Center'].dropna().unique().tolist())
+            selected_cc = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_ccs, key="cc_fip_select")
+            
+            if selected_cc:
+                df_filtered = df_f_raw[df_f_raw['Cost_Center'] == selected_cc]
+                aylar_sirali = df_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                
+                piv_fip_cc = df_filtered.pivot_table(
+                    index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
+                )
+                piv_fip_cc = piv_fip_cc.reindex(columns=[col for col in aylar_sirali if col in piv_fip_cc.columns])
+                piv_fip_cc.columns.name = None
+                piv_fip_cc.index.name = 'Masraf_Kalemi'
+                
+                numeric_cols_fip = piv_fip_cc.select_dtypes(include='number').columns
+                piv_fip_cc.loc['TOPLAM'] = 0
+                for col in numeric_cols_fip:
+                    if len(piv_fip_cc) > 1:
+                        piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc.drop('TOPLAM', errors='ignore')[col].sum()
+                
+                ay_listesi_fip = list(piv_fip_cc.columns)
+                t_fip_list, y_fip_list = [], []
+                for _, row in piv_fip_cc.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_fip)
+                    t_fip_list.append(tr)
+                    y_fip_list.append(yr)
+                piv_fip_cc['Sonuç / Trend'] = t_fip_list
+                piv_fip_cc['Yönetici Analiz Yorumu'] = y_fip_list
+
+                top_row_fip = piv_fip_cc.loc['TOPLAM']
+                t_tr_f, t_yr_f = trend_ve_yorum_uret(top_row_fip, ay_listesi_fip)
+                piv_fip_cc.loc['TOPLAM', 'Sonuç / Trend'] = t_tr_f
+                piv_fip_cc.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Toplam - {t_yr_f}"
+
+                st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri (K€)")
+                formatli_tablo_goster(piv_fip_cc)
+                
+                df_f_toplam_cc = df_filtered.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
+                fig_f_cc = px.bar(
+                    df_f_toplam_cc, x='Performance', y='Masraf_Kalemi', orientation='h',
+                    title=f"{selected_cc} - FIP Kalemleri Sıralaması (K€)",
+                    template="plotly_white"
+                )
+                fig_f_cc.update_layout(
+                    height=400,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
+                )
+                st.plotly_chart(fig_f_cc, width="stretch")
+        else:
+            st.info("FIP verisi bulunamadı.")
+
+    with tab5:
+        df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
+        if not df_f_raw_group.empty:
+            st.subheader("📂 FIP Grup Bazlı İnceleme (3A, 3B vb.)")
+            
+            unique_gruplar = sorted(df_f_raw_group['Grup'].dropna().unique().tolist())
+            selected_grup = st.selectbox("İncelemek İstediğiniz FIP Grubunu Seçin:", unique_gruplar, key="grup_select_tab5")
+            
+            if selected_grup:
+                df_grup_filtered = df_f_raw_group[df_f_raw_group['Grup'] == selected_grup]
+                aylar_sirali_grup = df_grup_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+                
+                piv_grup_detay = df_grup_filtered.pivot_table(
+                    index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
+                )
+                piv_grup_detay = piv_grup_detay.reindex(columns=[col for col in aylar_sirali_grup if col in piv_grup_detay.columns])
+                piv_grup_detay.columns.name = None
+                piv_grup_detay.index.name = 'Masraf_Kalemi'
+                
+                numeric_cols_gd = piv_grup_detay.select_dtypes(include='number').columns
+                piv_grup_detay.loc['TOPLAM'] = 0
+                for col in numeric_cols_gd:
+                    if len(piv_grup_detay) > 1:
+                        piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay.drop('TOPLAM', errors='ignore')[col].sum()
+
+                ay_listesi_g = list(piv_grup_detay.columns)
+                tg_list, yg_list = [], []
+                for _, row in piv_grup_detay.iterrows():
+                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_g)
+                    tg_list.append(tr)
+                    yg_list.append(yr)
+                piv_grup_detay['Sonuç / Trend'] = tg_list
+                piv_grup_detay['Yönetici Analiz Yorumu'] = yg_list
+                
+                top_row_g = piv_grup_detay.loc['TOPLAM']
+                g_tr, g_yr = trend_ve_yorum_uret(top_row_g, ay_listesi_g)
+                piv_grup_detay.loc['TOPLAM', 'Sonuç / Trend'] = g_tr
+                piv_grup_detay.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Grup Toplamı - {g_yr}"
+                    
+                st.markdown(f"**{selected_grup}** Grubuna Ait Detaylar")
+                formatli_tablo_goster(piv_grup_detay)
+                
+                df_grup_toplam = df_grup_filtered.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
+                fig_grup = px.bar(
+                    df_grup_toplam, x='Performance', y='Masraf_Kalemi', orientation='h',
+                    title=f"{selected_grup} Grubu Kalemleri (K€)",
+                    template="plotly_white"
+                )
+                fig_grup.update_layout(
+                    height=380,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
+                )
+                st.plotly_chart(fig_grup, width="stretch")
+        else:
+            st.info("FIP grup verisi bulunamadı.")
+
+    with tab6:
+        if piv_f is not None:
+            st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
+            formatli_tablo_goster(piv_f)
+            df_f_chart = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
+            if not df_f_chart.empty:
+                df_f_toplam_all = df_f_chart.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
+                fig_f = px.bar(
+                    df_f_toplam_all, x='Performance', y='Masraf_Kalemi', orientation='h',
+                    title="Tüm Alt Masraf Kalemleri Genel Dağılımı (K€)",
+                    template="plotly_white"
+                )
+                fig_f.update_layout(
+                    height=420,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    font=dict(size=11, color="#333"),
+                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
+                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
+                )
+                st.plotly_chart(fig_f, width="stretch")
+
+else:
+    st.info(f"💡 `{veri_tipi}` modunda analiz tablolarının oluşması için sol panelden ilgili Excel dosyalarınızı yükleyin.")
