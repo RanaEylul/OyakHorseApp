@@ -237,8 +237,7 @@ if saved_files:
                 pass
         st.rerun()
 
-# HATA DÜZELTME BURADA YAPILDI (3 değişken için 3 boş liste atandı)
-masse_list, cc_list, fip_list = [], [], []
+masse_list, cc_list, fip_list = [], []
 
 # Kayıtlı dosyaları işleme al
 if saved_files:
