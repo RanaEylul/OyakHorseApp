@@ -148,7 +148,6 @@ def pivot_tablo_olustur(veriler, index_col):
     piv.columns.name = None
     piv.index.name = index_col
     
-    # Kesin sıralama ve TOPLAM satırının eklenmesi
     if index_col == 'Kalem':
         istenilen_sira = ['MOD', 'MOS', 'FIP', 'TAXE', 'DEPRECIATION', 'DEPRECİATİON']
         aktif_indexler = [idx for idx in piv.index if str(idx).upper() != 'TOPLAM']
@@ -163,7 +162,6 @@ def pivot_tablo_olustur(veriler, index_col):
         sirali_indexler = sorted(aktif_indexler, key=sort_key)
         piv = piv.reindex(sirali_indexler)
         
-        # TOPLAM satırını her koşulda en alta hesaplayıp ekliyoruz
         numeric_cols = piv.select_dtypes(include='number').columns
         piv.loc['TOPLAM'] = 0
         for col in numeric_cols:
@@ -208,7 +206,12 @@ if uploaded_files:
 saved_files = [os.path.join(PERSIST_DIR, f) for f in os.listdir(PERSIST_DIR) if f.lower().endswith(('.xlsx', '.xls'))]
 
 if saved_files:
-    st.sidebar.markdown(f"✅ **Kayıtlı Dosya Sayısı:** {len(saved_files)}")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"📋 **Yüklü Olan Dosyalar ({len(saved_files)}):**")
+    for f_path in saved_files:
+        st.sidebar.text(f"• {os.path.basename(f_path)}")
+        
+    st.sidebar.markdown("")
     if st.sidebar.button("🗑️ Kayıtlı Tüm Dosyaları Temizle"):
         for f in saved_files:
             try:
@@ -257,7 +260,6 @@ if masse_list or cc_list or fip_list:
             if not df_m_all.empty:
                 df_m_chart = df_m_all.sort_values('Ay_Sira')
                 
-                # Tablodaki sıra (TOPLAM hariç) grafiğe birebir aktarılıyor
                 sabit_kalem_sirasi = [k for k in piv_m.index if k != 'TOPLAM']
                 
                 fig_m = px.bar(
