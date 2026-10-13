@@ -96,7 +96,6 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
 
 def loupes_sayfasini_oku_tum_aylar(saved_files_list):
     loupes_list = []
-    # Doğru bütçe ve reel indeks eşleştirmeleri: B4D (5, 6), HR16 (10, 11), HR18 (15, 16)
     proje_sutunlari = [
         ("B4D", 5, 6),
         ("HR16", 10, 11),
@@ -491,11 +490,23 @@ if masse_list or cc_list or fip_list:
         if piv_m is not None:
             st.subheader(f"Ana Kalemler Performans Özeti - {veri_tipi} (K€)")
             formatli_tablo_goster(piv_m)
+            if not is_cumul_mode:
+                st.markdown("---")
+                st.subheader("📈 Ana Kalemler Performans Grafiği")
+                df_m_melt = df_m_all.melt(id_vars=['Kalem', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
+                fig_m = px.bar(df_m_melt, x='Kalem', y='Deger', color='Ay', barmode='group', title="Ana Kalemler Aylık Performans Dağılımı")
+                st.plotly_chart(fig_m, use_container_width=True)
 
     with tab2:
         if piv_c is not None:
             st.subheader(f"🏢 Cost Center Yönetici Özeti - {veri_tipi}")
             formatli_tablo_goster(piv_c)
+            if not is_cumul_mode:
+                st.markdown("---")
+                st.subheader("📈 Cost Center Yönetici Özet Grafiği")
+                df_c_melt = df_c_all.melt(id_vars=['Cost_Center', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
+                fig_c = px.bar(df_c_melt, x='Cost_Center', y='Deger', color='Ay', barmode='group', title="Cost Center Aylık Dağılımı")
+                st.plotly_chart(fig_c, use_container_width=True)
 
     with tab3:
         df_c_raw = pd.concat(cc_list, ignore_index=True) if cc_list else pd.DataFrame()
@@ -516,6 +527,26 @@ if masse_list or cc_list or fip_list:
                 piv_cc_nature['Sonuç / Trend'] = t_list
                 piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_cc_nature)
+            
+            # --- TÜMÜNÜ GÖSTERME TABLOSU (AŞAĞIDA) ---
+            st.markdown("---")
+            st.markdown("### 📋 Tüm Cost Center Alt Kırılım Detayları (Genel Görünüm)")
+            aylar_sirali_all_cc = df_c_raw[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+            piv_all_cc = df_c_raw.pivot_table(index=['Cost_Center', 'Nature'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+            piv_all_cc = piv_all_cc.reindex(columns=[col for col in aylar_sirali_all_cc if col in piv_all_cc.columns])
+            t_all, y_all = [], []
+            for _, row in piv_all_cc.iterrows():
+                tr, yr = trend_ve_yorum_uret(row, list(piv_all_cc.columns))
+                t_all.append(tr); y_all.append(yr)
+            piv_all_cc['Sonuç / Trend'] = t_all
+            piv_all_cc['Yönetici Analiz Yorumu'] = y_all
+            formatli_tablo_goster(piv_all_cc)
+
+            if not is_cumul_mode:
+                st.markdown("---")
+                st.subheader("📈 Cost Center Alt Kırılımları Grafiği")
+                fig_all_cc = px.bar(df_c_raw, x='Cost_Center', y='Performance', color='Ay', barmode='group', title="Cost Center Performans Karşılaştırması")
+                st.plotly_chart(fig_all_cc, use_container_width=True)
 
     with tab4:
         df_f_raw = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
@@ -536,6 +567,20 @@ if masse_list or cc_list or fip_list:
                 piv_fip_cc['Sonuç / Trend'] = t_list
                 piv_fip_cc['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_fip_cc)
+            
+            # --- TÜMÜNÜ GÖSTERME TABLOSU (AŞAĞIDA) ---
+            st.markdown("---")
+            st.markdown("### 📋 Tüm Cost Center Bazlı Alt Masraf Kalemleri (Genel Görünüm)")
+            aylar_sirali_all_fip = df_f_raw[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+            piv_all_fip = df_f_raw.pivot_table(index=['Cost_Center', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+            piv_all_fip = piv_all_fip.reindex(columns=[col for col in aylar_sirali_all_fip if col in piv_all_fip.columns])
+            t_fip_all, y_fip_all = [], []
+            for _, row in piv_all_fip.iterrows():
+                tr, yr = trend_ve_yorum_uret(row, list(piv_all_fip.columns))
+                t_fip_all.append(tr); y_fip_all.append(yr)
+            piv_all_fip['Sonuç / Trend'] = t_fip_all
+            piv_all_fip['Yönetici Analiz Yorumu'] = y_fip_all
+            formatli_tablo_goster(piv_all_fip)
 
     with tab5:
         df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
@@ -556,11 +601,37 @@ if masse_list or cc_list or fip_list:
                 piv_grup_detay['Sonuç / Trend'] = t_list
                 piv_grup_detay['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_grup_detay)
+            
+            # --- TÜMÜNÜ GÖSTERME TABLOSU (AŞAĞIDA) ---
+            st.markdown("---")
+            st.markdown("### 📋 Tüm FIP Grup Bazlı Detaylar (Genel Görünüm)")
+            aylar_sirali_all_grup = df_f_raw_group[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+            piv_all_grup = df_f_raw_group.pivot_table(index=['Grup', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+            piv_all_grup = piv_all_grup.reindex(columns=[col for col in aylar_sirali_all_grup if col in piv_all_grup.columns])
+            t_g_all, y_g_all = [], []
+            for _, row in piv_all_grup.iterrows():
+                tr, yr = trend_ve_yorum_uret(row, list(piv_all_grup.columns))
+                t_g_all.append(tr); y_g_all.append(yr)
+            piv_all_grup['Sonuç / Trend'] = t_g_all
+            piv_all_grup['Yönetici Analiz Yorumu'] = y_g_all
+            formatli_tablo_goster(piv_all_grup)
+
+            if not is_cumul_mode:
+                st.markdown("---")
+                st.subheader("📈 FIP Grup Dağılım Grafiği")
+                fig_grup = px.bar(df_f_raw_group, x='Grup', y='Performance', color='Ay', barmode='group', title="FIP Grupları Aylık Performans Dağılımı")
+                st.plotly_chart(fig_grup, use_container_width=True)
 
     with tab6:
         if piv_f is not None:
             st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
             formatli_tablo_goster(piv_f)
+            if not is_cumul_mode:
+                st.markdown("---")
+                st.subheader("📈 Alt Masraf Kalemleri Grafiği")
+                df_f_melt = df_f_all.melt(id_vars=['Masraf_Kalemi', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
+                fig_f = px.bar(df_f_melt, x='Masraf_Kalemi', y='Deger', color='Ay', barmode='group', title="Alt Masraf Kalemleri Karşılaştırması")
+                st.plotly_chart(fig_f, use_container_width=True)
 
     # --- VTU ÖZET ANALİZİ ---
     if tab_vtu is not None:
@@ -619,6 +690,12 @@ if masse_list or cc_list or fip_list:
                     except AttributeError:
                         loupes_styler = loupes_styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
                 st.dataframe(loupes_styler, width="stretch", hide_index=True)
+
+                if not is_cumul_mode:
+                    st.markdown("---")
+                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Grafiği")
+                    fig_l = px.bar(df_loupes_comb, x='Proje', y=[c for c in df_loupes_comb.columns if 'REEL' in c], barmode='group', title="Loupes Proje Gerçekleşen Dağılımı")
+                    st.plotly_chart(fig_l, use_container_width=True)
             else:
                 st.info("Yüklenen dosyalarda Loupes sayfası verisi bulunamadı.")
 
