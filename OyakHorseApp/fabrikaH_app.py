@@ -492,14 +492,13 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_m)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Ana Kalemler Renkli Performans Dağılımı")
-                df_m_melt = df_m_all.melt(id_vars=['Kalem', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
+                st.subheader("📈 Ana Kalemler (+ / -) Durum Grafiği")
+                df_m_all['Durum'] = df_m_all['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
                 fig_m = px.bar(
-                    df_m_melt, x='Kalem', y='Deger', color='Kalem', 
-                    barmode='group', title="Ana Kalemlere Göre Renkli Dağılım",
-                    color_discrete_sequence=px.colors.qualitative.Set2
+                    df_m_all, x='Kalem', y='Performance', color='Durum',
+                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'},
+                    title="Ana Kalemler Artı / Eksi (Pozitif / Negatif) Performans Dağılımı"
                 )
-                fig_m.update_layout(showlegend=False)
                 st.plotly_chart(fig_m, use_container_width=True)
 
     with tab2:
@@ -508,14 +507,13 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_c)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Cost Center Yönetici Renkli Dağılım Grafiği")
-                df_c_melt = df_c_all.melt(id_vars=['Cost_Center', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
+                st.subheader("📈 Cost Center Yönetici Özet (+ / -) Grafiği")
+                df_c_all['Durum'] = df_c_all['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
                 fig_c = px.bar(
-                    df_c_melt, x='Cost_Center', y='Deger', color='Cost_Center',
-                    barmode='group', title="Cost Center Bazlı Renkli Performans Karşılaştırması",
-                    color_discrete_sequence=px.colors.qualitative.Pastel
+                    df_c_all, x='Cost_Center', y='Performance', color='Durum',
+                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'},
+                    title="Cost Center Artı / Eksi (Pozitif / Negatif) Performans Dağılımı"
                 )
-                fig_c.update_layout(showlegend=False)
                 st.plotly_chart(fig_c, use_container_width=True)
 
     with tab3:
@@ -560,11 +558,12 @@ if masse_list or cc_list or fip_list:
 
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Cost Center & Nature Bazlı Canlı Renk Grafiği")
+                st.subheader("📈 Cost Center & Nature Artı / Eksi Dağılım Grafiği")
+                df_c_raw['Durum'] = df_c_raw['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
                 fig_all_cc = px.bar(
-                    df_c_raw, x='Cost_Center', y='Performance', color='Nature',
-                    barmode='group', title="Cost Center ve Nature Dağılımı (Çok Renkli)",
-                    color_discrete_sequence=px.colors.qualitative.Bold
+                    df_c_raw, x='Cost_Center', y='Performance', color='Durum',
+                    barmode='group', title="Cost Center ve Nature Artı / Eksi Dağılımı",
+                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
                 )
                 st.plotly_chart(fig_all_cc, use_container_width=True)
 
@@ -648,13 +647,13 @@ if masse_list or cc_list or fip_list:
 
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 FIP Grup Çok Renkli Performans Dağılımı")
+                st.subheader("📈 FIP Grup Artı / Eksi Performans Dağılımı")
+                df_f_raw_group['Durum'] = df_f_raw_group['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
                 fig_grup = px.bar(
-                    df_f_raw_group, x='Grup', y='Performance', color='Grup',
-                    barmode='group', title="FIP Grupları Renkli Dağılım Analizi",
-                    color_discrete_sequence=px.colors.qualitative.Vivid
+                    df_f_raw_group, x='Grup', y='Performance', color='Durum',
+                    barmode='group', title="FIP Grupları Artı / Eksi Dağılımı",
+                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
                 )
-                fig_grup.update_layout(showlegend=False)
                 st.plotly_chart(fig_grup, use_container_width=True)
 
     with tab6:
@@ -663,14 +662,14 @@ if masse_list or cc_list or fip_list:
             formatli_tablo_goster(piv_f)
             if not is_cumul_mode:
                 st.markdown("---")
-                st.subheader("📈 Alt Masraf Kalemleri Canlı Renkli Grafiği")
-                df_f_melt = df_f_all.melt(id_vars=['Masraf_Kalemi', 'Ay'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
+                st.subheader("📈 Alt Masraf Kalemleri Artı / Eksi Grafiği")
+                df_f_all['Durum'] = df_f_all['Performance'].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                df_f_melt = df_f_all.melt(id_vars=['Masraf_Kalemi', 'Ay', 'Durum'], value_vars=['Performance'], var_name='Metric', value_name='Deger')
                 fig_f = px.bar(
-                    df_f_melt, x='Masraf_Kalemi', y='Deger', color='Masraf_Kalemi',
-                    barmode='group', title="Alt Masraf Kalemleri Renkli Karşılaştırması",
-                    color_discrete_sequence=px.colors.qualitative.Safe
+                    df_f_melt, x='Masraf_Kalemi', y='Deger', color='Durum',
+                    barmode='group', title="Alt Masraf Kalemleri Artı / Eksi Dağılımı",
+                    color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
                 )
-                fig_f.update_layout(showlegend=False)
                 st.plotly_chart(fig_f, use_container_width=True)
 
     # --- VTU ÖZET ANALİZİ ---
@@ -733,13 +732,18 @@ if masse_list or cc_list or fip_list:
 
                 if not is_cumul_mode:
                     st.markdown("---")
-                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Çok Renkli Grafiği")
-                    fig_l = px.bar(
-                        df_loupes_comb, x='Proje', y=[c for c in df_loupes_comb.columns if 'REEL' in c], 
-                        barmode='group', title="Loupes Proje Gerçekleşen Dağılımı (Çok Renkli)",
-                        color_discrete_sequence=px.colors.qualitative.Prism
-                    )
-                    st.plotly_chart(fig_l, use_container_width=True)
+                    st.subheader("📈 Loupes Proje Bütçe ve Gerçekleşen Artı / Eksi Grafiği")
+                    # İlk REEL sütununa göre artı eksi renklendirme
+                    reel_col = [c for c in df_loupes_comb.columns if 'REEL' in c]
+                    if reel_col:
+                        c_adi = reel_col[0]
+                        df_loupes_comb['Durum'] = df_loupes_comb[c_adi].apply(lambda x: 'Pozitif (+)' if x >= 0 else 'Negatif (-)')
+                        fig_l = px.bar(
+                            df_loupes_comb, x='Proje', y=c_adi, color='Durum',
+                            barmode='group', title="Loupes Proje Gerçekleşen Dağılımı Artı / Eksi",
+                            color_discrete_map={'Pozitif (+)': '#2e7d32', 'Negatif (-)': '#c62828'}
+                        )
+                        st.plotly_chart(fig_l, use_container_width=True)
             else:
                 st.info("Yüklenen dosyalarda Loupes sayfası verisi bulunamadı.")
 
