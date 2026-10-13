@@ -94,43 +94,83 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
     except Exception:
         return None
 
-def loupes_sayfasini_oku(file_source, dosya_adi):
-    ay_no, ay_adi = ay_bilgisi_al(dosya_adi)
-    try:
-        xl = pd.ExcelFile(file_source)
-        loupes_sheet = None
-        for s in xl.sheet_names:
-            if 'loupe' in s.lower():
-                loupes_sheet = s
-                break
-        if not loupes_sheet:
-            return pd.DataFrame()
-            
-        df = pd.read_excel(file_source, sheet_name=loupes_sheet)
-        records = []
-        proje_sutunlari = [
-            ("B4D", 3, 4, 5),
-            ("HR16", 9, 10, 11),
-            ("HR18", 14, 15, 16)
-        ]
-        
-        for proje, col_isim, col_bud, col_reel in proje_sutunlari:
-            try:
-                bud_val = pd.to_numeric(df.iloc[3, col_bud], errors='coerce') or 0.0
-                reel_val = pd.to_numeric(df.iloc[3, col_reel], errors='coerce') or 0.0
-                records.append({
-                    "Ay": ay_adi,
-                    "Ay_Sira": ay_no,
-                    "Proje": proje,
-                    "BUDGET": bud_val,
-                    "REEL": reel_val
-                })
-            except Exception:
-                pass
+def loupes_sayfasini_oku_tum_aylar(saved_files_list):
+    loupes_list = []
+    proje_sutunlari = [
+        ("B4D", 3, 4, 5),
+        ("HR16", 9, 10, 11),
+        ("HR18", 14, 15, 16)
+    ]
+    
+    for f_path in saved_files_list:
+        f_name = os.path.basename(f_path)
+        ay_no, ay_adi = ay_bilgisi_al(f_name)
+        try:
+            xl = pd.ExcelFile(f_path)
+            loupes_sheet = None
+            for s in xl.sheet_names:
+                if 'loupe' in s.lower():
+                    loupes_sheet = s
+                    break
+            if not loupes_sheet:
+                continue
                 
-        return pd.DataFrame(records)
-    except Exception:
+            df = pd.read_excel(f_path, sheet_name=loupes_sheet)
+            for proje, col_isim, col_bud, col_reel in proje_sutunlari:
+                try:
+                    bud_val = pd.to_numeric(df.iloc[3, col_bud], errors='coerce') or 0.0
+                    reel_val = pd.to_numeric(df.iloc[3, col_reel], errors='coerce') or 0.0
+                    loupes_list.append({
+                        "Ay": ay_adi,
+                        "Ay_Sira": ay_no,
+                        "Proje": proje,
+                        "BUDGET": bud_val,
+                        "REEL": reel_val
+                    })
+                except Exception:
+                    pass
+        except Exception:
+            continue
+            
+    if not loupes_list:
         return pd.DataFrame()
+        
+    df_l_all = pd.DataFrame(loupes_list)
+    aylar_sirali = df_l_all[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+    
+    piv_reel = df_l_all.pivot_table(index='Proje', columns='Ay', values='REEL', aggfunc='sum', fill_value=0)
+    piv_bud = df_l_all.pivot_table(index='Proje', columns='Ay', values='BUDGET', aggfunc='sum', fill_value=0)
+    
+    piv_reel = piv_reel.reindex(columns=[c for c in aylar_sirali if c in piv_reel.columns])
+    piv_bud = piv_bud.reindex(columns=[c for c in aylar_sirali if c in piv_bud.columns])
+    
+    l_comb = pd.DataFrame(index=piv_reel.index)
+    for col in piv_reel.columns:
+        l_comb[f"{col} - REEL"] = piv_reel[col]
+        l_comb[f"{col} - BUDGET"] = piv_bud[col]
+        l_comb[f"{col} - Sapma"] = piv_reel[col] - piv_bud[col]
+        
+    t_list, y_list = [], []
+    for _, row in l_comb.iterrows():
+        last_ay = aylar_sirali[-1] if aylar_sirali else None
+        if last_ay and f"{last_ay} - Sapma" in row:
+            fark = row[f"{last_ay} - Sapma"]
+            if fark > 0.1:
+                t_list.append("▼ Bütçe Aşımı")
+                y_list.append(f"{last_ay} ayında bütçe aşıldı.")
+            elif fark < -0.1:
+                t_list.append("▲ Tasarruf")
+                y_list.append(f"{last_ay} ayında tasarruf sağlandı.")
+            else:
+                t_list.append("➔ Kontrol Altında")
+                y_list.append("Bütçeye paralel.")
+        else:
+            t_list.append("➔ Takipte")
+            y_list.append("Veri inceleniyor.")
+            
+    l_comb['Sonuç / Trend'] = t_list
+    l_comb['Yönetici Analiz Yorumu'] = y_list
+    return l_comb.reset_index(), aylar_sirali
 
 def vtu_sayfasini_oku_tum_aylar(saved_files_list):
     vtu_aylik_ozet_list = []
@@ -187,7 +227,6 @@ def vtu_sayfasini_oku_tum_aylar(saved_files_list):
 
     df_ozet_all = pd.concat(vtu_aylik_ozet_list, ignore_index=True)
     df_detay_all = pd.concat(vtu_aylik_detay_list, ignore_index=True)
-    
     aylar_sirali = df_ozet_all[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
     
     hierarchical_blocks = {}
@@ -563,21 +602,22 @@ if masse_list or cc_list or fip_list:
             else:
                 st.info("Yüklenen aylık dosyalar içinde VTU verisi bulunamadı.")
 
-    # --- LOUPES ANALİZİ ---
+    # --- LOUPES ANALİZİ (Çoklu Ay Karşılaştırma, B4D Dahil & Yönetici Yorumları) ---
     if tab_loupes is not None:
         with tab_loupes:
-            st.subheader("🔍 Loupes Sayfası Proje Özeti (B4D, HR16, HR18)")
-            loupes_list = []
-            for f_path in saved_files:
-                f_name = os.path.basename(f_path)
-                df_l_single = loupes_sayfasini_oku(f_path, f_name)
-                if not df_l_single.empty:
-                    loupes_list.append(df_l_single)
+            st.subheader("🔍 Loupes Sayfası Çoklu Ay Karşılaştırma ve Proje Özeti (B4D, HR16, HR18)")
+            df_loupes_comb, aylar_listesi = loupes_sayfasini_oku_tum_aylar(saved_files)
             
-            if loupes_list:
-                df_loupes_all = pd.concat(loupes_list, ignore_index=True)
-                piv_loupes = df_loupes_all.pivot_table(index='Proje', columns='Ay', values=['BUDGET', 'REEL'], aggfunc='sum', fill_value=0)
-                st.dataframe(piv_loupes.style.format("{:,.2f}"), width="stretch")
+            if not df_loupes_comb.empty:
+                format_dict_loupes = {col: "{:+,.2f}" if "Sapma" in col else "{:,.2f}" for col in df_loupes_comb.columns if col not in ['Proje', 'Sonuç / Trend', 'Yönetici Analiz Yorumu']}
+                
+                loupes_styler = df_loupes_comb.style.format(format_dict_loupes, na_rep="0.0")
+                if 'Sonuç / Trend' in df_loupes_comb.columns:
+                    try:
+                        loupes_styler = loupes_styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
+                    except AttributeError:
+                        loupes_styler = loupes_styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
+                st.dataframe(loupes_styler, width="stretch", hide_index=True)
             else:
                 st.info("Yüklenen dosyalarda Loupes sayfası verisi bulunamadı.")
 
