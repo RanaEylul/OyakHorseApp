@@ -94,100 +94,156 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
     except Exception:
         return None
 
-def vtu_sayfasini_oku(file_source):
-    try:
-        xl = pd.ExcelFile(file_source)
-        vtu_sheet = None
-        for s in xl.sheet_names:
-            if 'vtu' in s.lower():
-                vtu_sheet = s
-                break
-        if not vtu_sheet:
-            return {}
-            
-        df = pd.read_excel(file_source, sheet_name=vtu_sheet)
-        hierarchical_blocks = {}
+def vtu_sayfasini_oku_tum_aylar(saved_files_list):
+    """
+    Tüm yüklenen aylık dosyaların VTU sayfalarını okuyup aylara göre karşılaştırmalı veri paketleri oluşturur.
+    """
+    vtu_aylik_ozet_list = []
+    vtu_aylik_detay_list = []
+    
+    mappings = [
+        (0, "B4D"),
+        (6, "HR 16"),
+        (12, "HR 18")
+    ]
+    
+    for f_path in saved_files_list:
+        f_name = os.path.basename(f_path)
+        ay_no, ay_adi = ay_bilgisi_al(f_name)
         
-        mappings = [
-            (0, "B4D"),
-            (6, "HR 16"),
-            (12, "HR 18")
-        ]
-        
-        for base_col, hat_adi in mappings:
-            # Üst Özet Tablo
-            sub_df = df.iloc[3:8, base_col+3:base_col+6].copy()
-            sub_df.columns = ['NATURE', 'REEL (EUR)', 'BUDGET (EUR)']
-            sub_df = sub_df.dropna(subset=['NATURE'])
-            sub_df['REEL (EUR)'] = pd.to_numeric(sub_df['REEL (EUR)'], errors='coerce').fillna(0)
-            sub_df['BUDGET (EUR)'] = pd.to_numeric(sub_df['BUDGET (EUR)'], errors='coerce').fillna(0)
-            sub_df['Sapma'] = sub_df['REEL (EUR)'] - sub_df['BUDGET (EUR)']
+        try:
+            xl = pd.ExcelFile(f_path)
+            vtu_sheet = None
+            for s in xl.sheet_names:
+                if 'vtu' in s.lower():
+                    vtu_sheet = s
+                    break
+            if not vtu_sheet:
+                continue
+                
+            df = pd.read_excel(f_path, sheet_name=vtu_sheet)
             
-            # Üst Özet için Yorum ve Trend
-            t_ozet, y_ozet = [], []
-            for _, row in sub_df.iterrows():
-                fark = row['Sapma']
-                if "Total" in str(row['NATURE']):
-                    if fark > 0:
-                        t_ozet.append("▼ Bütçe Aşımı")
-                        y_ozet.append("Genel toplam bütçenin üzerinde.")
-                    else:
-                        t_ozet.append("▲ Bütçe Altında")
-                        y_ozet.append("Genel toplam bütçeye göre olumlu.")
-                else:
-                    if fark > 5:
-                        t_ozet.append("▼ Yüksek Sapma")
-                        y_ozet.append("Kalem bütçesini aştı.")
-                    elif fark < -5:
-                        t_ozet.append("▲ Güçlü Tasarruf")
-                        y_ozet.append("Olumlu tasarruf sağlandı.")
-                    else:
-                        t_ozet.append("➔ Kontrol Altında")
-                        y_ozet.append("Bütçeye paralel seyrediyor.")
-            sub_df['Sonuç / Trend'] = t_ozet
-            sub_df['Yönetici Analiz Yorumu'] = y_ozet
-            
-            # Alt Detay Tablo (GM174MOD vb.)
-            detay_df = df.iloc[13:34, [base_col+1, base_col+2, base_col+3, base_col+4, base_col+5]].copy()
-            detay_df.columns = ['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE', 'REEL (EUR)', 'BUDGET (EUR)']
-            detay_df = detay_df.dropna(subset=['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE'], how='all')
-            detay_df['NATURE'] = detay_df['NATURE'].fillna('')
-            detay_df['REEL (EUR)'] = pd.to_numeric(detay_df['REEL (EUR)'], errors='coerce').fillna(0)
-            detay_df['BUDGET (EUR)'] = pd.to_numeric(detay_df['BUDGET (EUR)'], errors='coerce').fillna(0)
-            detay_df['Sapma'] = detay_df['REEL (EUR)'] - detay_df['BUDGET (EUR)']
-            
-            t_list, y_list = [], []
-            for _, row in detay_df.iterrows():
-                fark = row['Sapma']
-                kod_str = str(row['KOD / BAŞLIK']).upper()
-                if "TOTAL" in kod_str:
-                    if fark > 0:
-                        t_list.append("▼ Bütçe Aşımı")
-                        y_list.append("Grup toplamı bütçenin üzerinde.")
-                    else:
-                        t_list.append("▲ Tasarruf")
-                        y_list.append("Grup toplamı bütçe altında.")
-                else:
-                    if fark > 2:
-                        t_list.append("▼ Maliyet Artışı")
-                        y_list.append("Harcama bütçeyi aştı.")
-                    elif fark < -2:
-                        t_list.append("▲ İyileşme")
-                        y_list.append("Olumlu tasarruf.")
-                    else:
-                        t_list.append("➔ Stabil")
-                        y_list.append("Kontrol altında.")
-            detay_df['Sonuç / Trend'] = t_list
-            detay_df['Yönetici Analiz Yorumu'] = y_list
-            
-            hierarchical_blocks[hat_adi] = {
-                "ozet": sub_df,
-                "detay": detay_df
-            }
-            
-        return hierarchical_blocks
-    except Exception:
+            for base_col, hat_adi in mappings:
+                # 1. Üst Özet
+                sub_df = df.iloc[3:8, base_col+3:base_col+6].copy()
+                sub_df.columns = ['NATURE', 'REEL', 'BUDGET']
+                sub_df = sub_df.dropna(subset=['NATURE'])
+                sub_df['Hat'] = hat_adi
+                sub_df['Ay'] = ay_adi
+                sub_df['Ay_Sira'] = ay_no
+                sub_df['REEL'] = pd.to_numeric(sub_df['REEL'], errors='coerce').fillna(0)
+                sub_df['BUDGET'] = pd.to_numeric(sub_df['BUDGET'], errors='coerce').fillna(0)
+                vtu_aylik_ozet_list.append(sub_df)
+                
+                # 2. Alt Detay
+                detay_df = df.iloc[13:34, [base_col+1, base_col+2, base_col+3, base_col+4, base_col+5]].copy()
+                detay_df.columns = ['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE', 'REEL', 'BUDGET']
+                detay_df = detay_df.dropna(subset=['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE'], how='all')
+                detay_df['NATURE'] = detay_df['NATURE'].fillna('')
+                detay_df['Hat'] = hat_adi
+                detay_df['Ay'] = ay_adi
+                detay_df['Ay_Sira'] = ay_no
+                detay_df['REEL'] = pd.to_numeric(detay_df['REEL'], errors='coerce').fillna(0)
+                detay_df['BUDGET'] = pd.to_numeric(detay_df['BUDGET'], errors='coerce').fillna(0)
+                vtu_aylik_detay_list.append(detay_df)
+                
+        except Exception:
+            continue
+
+    if not vtu_aylik_ozet_list:
         return {}
+
+    df_ozet_all = pd.concat(vtu_aylik_ozet_list, ignore_index=True)
+    df_detay_all = pd.concat(vtu_aylik_detay_list, ignore_index=True)
+    
+    aylar_sirali = df_ozet_all[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
+    
+    hierarchical_blocks = {}
+    for hat_adi in ["B4D", "HR 16", "HR 18"]:
+        o_hat = df_ozet_all[df_ozet_all['Hat'] == hat_adi]
+        d_hat = df_detay_all[df_detay_all['Hat'] == hat_adi]
+        
+        if o_hat.empty and d_hat.empty:
+            continue
+            
+        # Üst Özet Pivot
+        piv_o_reel = o_hat.pivot_table(index='NATURE', columns='Ay', values='REEL', aggfunc='sum', fill_value=0)
+        piv_o_bud = o_hat.pivot_table(index='NATURE', columns='Ay', values='BUDGET', aggfunc='sum', fill_value=0)
+        
+        piv_o_reel = piv_o_reel.reindex(columns=[c for c in aylar_sirali if c in piv_o_reel.columns])
+        piv_o_bud = piv_o_bud.reindex(columns=[c for c in aylar_sirali if c in piv_o_bud.columns])
+        
+        # Kolon isimlerini REEL / BUDGET olarak düzenleme
+        o_comb = pd.DataFrame(index=piv_o_reel.index)
+        for col in piv_o_reel.columns:
+            o_comb[f"{col} - REEL"] = piv_o_reel[col]
+            o_comb[f"{col} - BUDGET"] = piv_o_bud[col]
+            o_comb[f"{col} - Sapma"] = piv_o_reel[col] - piv_o_bud[col]
+            
+        # Yorum ve Trend
+        t_ozet, y_ozet = [], []
+        for _, row in o_comb.iterrows():
+            last_ay = aylar_sirali[-1] if aylar_sirali else None
+            if last_ay and f"{last_ay} - Sapma" in row:
+                fark = row[f"{last_ay} - Sapma"]
+                if fark > 5:
+                    t_ozet.append("▼ Bütçe Aşımı")
+                    y_ozet.append(f"{last_ay} ayında bütçe aşıldı.")
+                elif fark < -5:
+                    t_ozet.append("▲ Güçlü Tasarruf")
+                    y_ozet.append(f"{last_ay} ayında olumlu tasarruf.")
+                else:
+                    t_ozet.append("➔ Kontrol Altında")
+                    y_ozet.append("Bütçeye paralel seyrediyor.")
+            else:
+                t_ozet.append("➔ Takip Edilmeli")
+                y_ozet.append("Veri inceleniyor.")
+                
+        o_comb['Sonuç / Trend'] = t_ozet
+        o_comb['Yönetici Analiz Yorumu'] = y_ozet
+        o_comb = o_comb.reset_index()
+
+        # Alt Detay Pivot
+        piv_d_reel = d_hat.pivot_table(index=['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE'], columns='Ay', values='REEL', aggfunc='sum', fill_value=0)
+        piv_d_bud = d_hat.pivot_table(index=['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE'], columns='Ay', values='BUDGET', aggfunc='sum', fill_value=0)
+        
+        piv_d_reel = piv_d_reel.reindex(columns=[c for c in aylar_sirali if c in piv_d_reel.columns])
+        piv_d_bud = piv_d_bud.reindex(columns=[c for c in aylar_sirali if c in piv_d_bud.columns])
+        
+        d_comb = pd.DataFrame(index=piv_d_reel.index)
+        for col in piv_d_reel.columns:
+            d_comb[f"{col} - REEL"] = piv_d_reel[col]
+            d_comb[f"{col} - BUDGET"] = piv_d_bud[col]
+            d_comb[f"{col} - Sapma"] = piv_d_reel[col] - piv_d_bud[col]
+            
+        t_detay, y_detay = [], []
+        for _, row in d_comb.iterrows():
+            last_ay = aylar_sirali[-1] if aylar_sirali else None
+            if last_ay and f"{last_ay} - Sapma" in row:
+                fark = row[f"{last_ay} - Sapma"]
+                if fark > 2:
+                    t_detay.append("▼ Maliyet Artışı")
+                    y_detay.append(f"{last_ay} harcaması yüksek.")
+                elif fark < -2:
+                    t_detay.append("▲ İyileşme")
+                    y_detay.append(f"{last_ay} tasarruflu.")
+                else:
+                    t_detay.append("➔ Stabil")
+                    y_detay.append("Kontrol altında.")
+            else:
+                t_detay.append("➔ Takip Edilmeli")
+                y_detay.append("Veri inceleniyor.")
+                
+        d_comb['Sonuç / Trend'] = t_detay
+        d_comb['Yönetici Analiz Yorumu'] = y_detay
+        d_comb = d_comb.reset_index()
+
+        hierarchical_blocks[hat_adi] = {
+            "ozet": o_comb,
+            "detay": d_comb
+        }
+
+    return hierarchical_blocks
 
 def trend_ve_yorum_uret(row, ay_kolonlari):
     if len(ay_kolonlari) < 2:
@@ -447,15 +503,12 @@ if masse_list or cc_list or fip_list:
             st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
             formatli_tablo_goster(piv_f)
 
-    # --- VTU ÖZET ANALİZİ (SADECE MONTHLY MODUNDA) ---
+    # --- VTU ÖZET ANALİZİ (SADECE MONTHLY MODUNDA VE ÇOKLU AY Desteği) ---
     if tab_vtu is not None:
         with tab_vtu:
-            st.subheader("📊 VTU Proje ve Hat Detayları (B4D, HR 16, HR 18 Hiyerarşisi)")
+            st.subheader("📊 VTU Proje ve Hat Detayları (Çoklu Ay Karşılaştırmalı)")
             
-            tum_vtu_bloklari = {}
-            for file_path in saved_files:
-                bloklar = vtu_sayfasini_oku(file_path)
-                tum_vtu_bloklari.update(bloklar)
+            tum_vtu_bloklari = vtu_sayfasini_oku_tum_aylar(saved_files)
                 
             if tum_vtu_bloklari:
                 secilen_hat = st.selectbox(
@@ -467,10 +520,10 @@ if masse_list or cc_list or fip_list:
                 if secilen_hat:
                     veri_paket = tum_vtu_bloklari[secilen_hat]
                     
-                    st.markdown(f"### 📌 **{secilen_hat}** - Üst Özet Tablo")
-                    format_dict = {'REEL (EUR)': '{:,.2f}', 'BUDGET (EUR)': '{:,.2f}', 'Sapma': '{:+,.2f}'}
+                    st.markdown(f"### 📌 **{secilen_hat}** - Aylara Göre Üst Özet Tablo")
+                    format_dict = {col: "{:+,.2f}" if "Sapma" in col else "{:,.2f}" for col in veri_paket["ozet"].columns if col not in ['NATURE', 'Sonuç / Trend', 'Yönetici Analiz Yorumu']}
                     
-                    ozet_styler = veri_paket["ozet"].style.format(format_dict, na_rep="")
+                    ozet_styler = veri_paket["ozet"].style.format(format_dict, na_rep="0.0")
                     if 'Sonuç / Trend' in veri_paket["ozet"].columns:
                         try:
                             ozet_styler = ozet_styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
@@ -478,8 +531,10 @@ if masse_list or cc_list or fip_list:
                             ozet_styler = ozet_styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
                     st.dataframe(ozet_styler, width="stretch", hide_index=True)
                     
-                    st.markdown(f"### 🔍 **{secilen_hat}** Alt Detay Operasyonları (GM174MOD, Volants vb.)")
-                    detay_styler = veri_paket["detay"].style.format(format_dict, na_rep="")
+                    st.markdown(f"### 🔍 **{secilen_hat}** - Aylara Göre Alt Detay Operasyonları")
+                    format_dict_detay = {col: "{:+,.2f}" if "Sapma" in col else "{:,.2f}" for col in veri_paket["detay"].columns if col not in ['KOD / BAŞLIK', 'GM (TANIM)', 'NATURE', 'Sonuç / Trend', 'Yönetici Analiz Yorumu']}
+                    
+                    detay_styler = veri_paket["detay"].style.format(format_dict_detay, na_rep="0.0")
                     if 'Sonuç / Trend' in veri_paket["detay"].columns:
                         try:
                             detay_styler = detay_styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
