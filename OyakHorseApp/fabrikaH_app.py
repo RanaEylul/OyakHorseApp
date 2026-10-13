@@ -4,10 +4,13 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-# 📁 Kalıcı Depolama Klasörü Tanımı
-PERSIST_DIR = "uploaded_excel_files"
-if not os.path.exists(PERSIST_DIR):
-    os.makedirs(PERSIST_DIR)
+# 📁 Ayrı Kalıcı Depolama Klasörleri Tanımı
+CUMUL_DIR = "uploaded_cumul_files"
+MONTHLY_DIR = "uploaded_monthly_files"
+
+for d in [CUMUL_DIR, MONTHLY_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 st.set_page_config(page_title="Finansal Performans Özeti", layout="wide")
 
@@ -191,28 +194,42 @@ def pivot_tablo_olustur(veriler, index_col):
 
     return piv, df_concat
 
-# --- SIDEBAR (Kalıcı Dosya Yükleme Paneli) ---
+# --- SIDEBAR (Mod Seçimli Kalıcı Dosya Paneli) ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
-uploaded_files = st.sidebar.file_uploader("Aylık Excel Dosyalarını Yükleyin (Örn: M06, M07, M08)", type=["xlsx", "xls"], accept_multiple_files=True)
 
-# Yeni yüklenen dosyaları kalıcı klasöre kaydet
+veri_tipi = st.sidebar.radio(
+    "İşlem Yapılacak Veri Modunu Seçin:",
+    ["📊 Kümülatif (Cumul)", "📅 Aylık (Monthly)"],
+    key="veri_tipi_secim"
+)
+
+aktif_klasor = CUMUL_DIR if "Kümülatif" in veri_tipi else MONTHLY_DIR
+
+uploaded_files = st.sidebar.file_uploader(
+    f"{veri_tipi} Excel Dosyalarını Yükleyin", 
+    type=["xlsx", "xls"], 
+    accept_multiple_files=True,
+    key="file_uploader_multi"
+)
+
+# Yeni yüklenen dosyaları seçilen klasöre kaydet
 if uploaded_files:
     for u_file in uploaded_files:
-        file_path = os.path.join(PERSIST_DIR, u_file.name)
+        file_path = os.path.join(aktif_klasor, u_file.name)
         with open(file_path, "wb") as f:
             f.write(u_file.getbuffer())
 
-# Kayıtlı tüm dosyaları klasörden listele
-saved_files = [os.path.join(PERSIST_DIR, f) for f in os.listdir(PERSIST_DIR) if f.lower().endswith(('.xlsx', '.xls'))]
+# Seçilen klasördeki kayıtlı dosyaları listele
+saved_files = [os.path.join(aktif_klasor, f) for f in os.listdir(aktif_klasor) if f.lower().endswith(('.xlsx', '.xls'))]
 
 if saved_files:
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f"📋 **Yüklü Olan Dosyalar ({len(saved_files)}):**")
+    st.sidebar.markdown(f"📋 **{veri_tipi} Yüklü Dosyalar ({len(saved_files)}):**")
     for f_path in saved_files:
         st.sidebar.text(f"• {os.path.basename(f_path)}")
         
     st.sidebar.markdown("")
-    if st.sidebar.button("🗑️ Kayıtlı Tüm Dosyaları Temizle"):
+    if st.sidebar.button(f"🗑️ {veri_tipi} Tüm Dosyaları Temizle"):
         for f in saved_files:
             try:
                 os.remove(f)
@@ -220,7 +237,7 @@ if saved_files:
                 pass
         st.rerun()
 
-masse_list, cc_list, fip_list = [], [], []
+masse_list, cc_list, fip_list = [], []
 
 # Kayıtlı dosyaları işleme al
 if saved_files:
@@ -239,6 +256,8 @@ if saved_files:
 
 # --- ANA EKRAN ---
 if masse_list or cc_list or fip_list:
+    st.info(f"Aktif Görüntülenen Mod: **{veri_tipi}**")
+    
     piv_m, df_m_all = pivot_tablo_olustur(masse_list, 'Kalem')
     piv_c, df_c_all = pivot_tablo_olustur(cc_list, 'Cost_Center')
     piv_f, df_f_all = pivot_tablo_olustur(fip_list, 'Masraf_Kalemi')
@@ -254,7 +273,7 @@ if masse_list or cc_list or fip_list:
 
     with tab1:
         if piv_m is not None:
-            st.subheader("Ana Kalemler Performans Özeti (K€)")
+            st.subheader(f"Ana Kalemler Performans Özeti - {veri_tipi} (K€)")
             formatli_tablo_goster(piv_m)
             
             if not df_m_all.empty:
@@ -264,7 +283,7 @@ if masse_list or cc_list or fip_list:
                 
                 fig_m = px.bar(
                     df_m_chart, x='Kalem', y='Performance', color='Ay', barmode='group',
-                    title="Ana Kalemlerin Aylara Göre Performansı (+ / - Değerler)",
+                    title=f"Ana Kalemlerin Aylara Göre Performansı ({veri_tipi})",
                     template="plotly_white",
                     category_orders={"Kalem": sabit_kalem_sirasi}
                 )
@@ -282,7 +301,7 @@ if masse_list or cc_list or fip_list:
 
     with tab2:
         if piv_c is not None:
-            st.subheader("🏢 Cost Center (Masraf Yeri) Yönetici Özeti")
+            st.subheader(f"🏢 Cost Center Yönetici Özeti - {veri_tipi}")
             formatli_tablo_goster(piv_c)
             st.markdown("---")
             if not df_c_all.empty:
@@ -291,7 +310,7 @@ if masse_list or cc_list or fip_list:
                 
                 fig_c = px.bar(
                     df_c_toplam, x='Performance', y='Cost_Center', orientation='h',
-                    title="Cost Center Bazlı Net Performans Dağılımı (K€)",
+                    title=f"Cost Center Bazlı Net Performans ({veri_tipi}) (K€)",
                     template="plotly_white"
                 )
                 fig_c.update_layout(
@@ -500,4 +519,4 @@ if masse_list or cc_list or fip_list:
                 st.plotly_chart(fig_f, width="stretch")
 
 else:
-    st.info("💡 Karşılaştırma tabloları ve trend grafiklerinin oluşması için sol panelden aylık Excel dosyalarınızı yükleyin.")
+    st.info(f"💡 `{veri_tipi}` modunda analiz tablolarının oluşması için sol panelden ilgili Excel dosyalarınızı yükleyin.")
