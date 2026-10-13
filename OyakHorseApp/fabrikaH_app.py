@@ -107,16 +107,81 @@ def vtu_sayfasini_oku(file_source):
             
         df = pd.read_excel(file_source, sheet_name=vtu_sheet)
         blocks = {}
+        
+        # 1. Satır Blokları (B4D, HR 16, HR 18 vb.)
         for col_idx in range(df.shape[1]):
             val = df.iloc[0, col_idx]
             if pd.notna(val) and isinstance(val, str) and val.strip() not in ['GM', 'VTU']:
                 block_name = val.strip()
                 sub_df = df.iloc[1:8, col_idx:col_idx+6].copy()
-                sub_df.columns = ['Col0', 'Col1', 'Nature', 'REEL', 'BUDGET', 'Col5']
+                sub_df.columns = ['C0', 'C1', 'Nature', 'REEL', 'BUDGET', 'C5']
                 sub_df = sub_df[['Nature', 'REEL', 'BUDGET']].dropna(subset=['Nature'])
-                # Sadece MOD, MOS, FIP, Depreciation ve Grand Total satırlarını al
                 sub_df = sub_df[sub_df['Nature'].astype(str).str.contains('MOD|MOS|FIP|Depreciation|Total', case=False, na=False)]
+                sub_df['REEL'] = pd.to_numeric(sub_df['REEL'], errors='coerce').fillna(0)
+                sub_df['BUDGET'] = pd.to_numeric(sub_df['BUDGET'], errors='coerce').fillna(0)
+                sub_df['Sapma (Reel - Budget)'] = sub_df['REEL'] - sub_df['BUDGET']
+                
+                # Yorum ve Trend üretimi
+                t_list, y_list = [], []
+                for _, row in sub_df.iterrows():
+                    fark = row['Sapma (Reel - Budget)']
+                    if "Total" in str(row['Nature']):
+                        if fark > 0:
+                            t_list.append("▼ Bütçe Aşımı")
+                            y_list.append("Toplam maliyet bütçenin üzerinde.")
+                        else:
+                            t_list.append("▲ Bütçe Altında / Tasarruf")
+                            y_list.append("Toplam maliyet bütçeye göre olumlu.")
+                    else:
+                        if fark > 10:
+                            t_list.append("▼ Yüksek Sapma")
+                            y_list.append("Kalem bazında bütçe aşımı var.")
+                        elif fark < -10:
+                            t_list.append("▲ Güçlü Tasarruf")
+                            y_list.append("Kalem bazında olumlu tasarruf.")
+                        else:
+                            t_list.append("➔ Kontrol Altında")
+                            y_list.append("Bütçeye yakın seyrediyor.")
+                sub_df['Sonuç / Trend'] = t_list
+                sub_df['Yönetici Analiz Yorumu'] = y_list
                 blocks[block_name] = sub_df
+
+        # 2. GM17 (B MOTOR vb.) Blokları
+        for col_idx in range(df.shape[1]):
+            val = df.iloc[11, col_idx]
+            if pd.notna(val) and isinstance(val, str) and val.strip() not in ['GM', 'VTU', 'R2026_VTU', 'B2026_VTU', 'EUR']:
+                block_name = val.strip()
+                sub_df = df.iloc[13:34, [col_idx-1 if col_idx>0 else 0, col_idx, col_idx+2, col_idx+3, col_idx+4]].copy()
+                sub_df.columns = ['Sub_Project', 'Description', 'Nature', 'REEL', 'BUDGET']
+                sub_df = sub_df.dropna(subset=['Nature'])
+                sub_df['REEL'] = pd.to_numeric(sub_df['REEL'], errors='coerce').fillna(0)
+                sub_df['BUDGET'] = pd.to_numeric(sub_df['BUDGET'], errors='coerce').fillna(0)
+                sub_df['Sapma (Reel - Budget)'] = sub_df['REEL'] - sub_df['BUDGET']
+                
+                t_list, y_list = [], []
+                for _, row in sub_df.iterrows():
+                    fark = row['Sapma (Reel - Budget)']
+                    if "TOTAL" in str(row['Description']).upper() or "TOTAL" in str(row['Nature']).upper():
+                        if fark > 0:
+                            t_list.append("▼ Bütçe Aşımı")
+                            y_list.append("Grup toplamı bütçeyi aştı.")
+                        else:
+                            t_list.append("▲ Tasarruf")
+                            y_list.append("Grup toplamı bütçe altında.")
+                    else:
+                        if fark > 5:
+                            t_list.append("▼ Maliyet Artışı")
+                            y_list.append("Beklenenden yüksek harcama.")
+                        elif fark < -5:
+                            t_list.append("▲ İyileşme")
+                            y_list.append("Tasarruf sağlandı.")
+                        else:
+                            t_list.append("➔ Stabil")
+                            y_list.append("Kontrol altında.")
+                sub_df['Sonuç / Trend'] = t_list
+                sub_df['Yönetici Analiz Yorumu'] = y_list
+                blocks[block_name] = sub_df
+
         return blocks
     except Exception:
         return {}
@@ -153,14 +218,12 @@ def renk_stili_ver(val):
 
 def formatli_tablo_goster(piv_df):
     format_dict = {col: "{:+,.1f}" for col in piv_df.columns if col not in ['Sonuç / Trend', 'Yönetici Analiz Yorumu']}
-    
     styler = piv_df.style.format(format_dict, na_rep="0.0")
     if 'Sonuç / Trend' in piv_df.columns:
         try:
             styler = styler.map(renk_stili_ver, subset=['Sonuç / Trend'])
         except AttributeError:
             styler = styler.applymap(renk_stili_ver, subset=['Sonuç / Trend'])
-        
     st.dataframe(styler, width="stretch")
 
 def pivot_tablo_olustur(veriler, index_col):
@@ -171,7 +234,6 @@ def pivot_tablo_olustur(veriler, index_col):
         return None, []
     
     aylar_sirali = df_concat[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-    
     piv = df_concat.pivot_table(index=index_col, columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
     piv = piv.reindex(columns=[col for col in aylar_sirali if col in piv.columns])
     
@@ -221,7 +283,7 @@ def pivot_tablo_olustur(veriler, index_col):
 
     return piv, df_concat
 
-# --- SIDEBAR (Ayrı Mod ve Ayrı Yükleme Panelleri) ---
+# --- SIDEBAR ---
 st.sidebar.header("📁 Excel Yükleme Paneli")
 
 veri_tipi = st.sidebar.radio(
@@ -232,7 +294,6 @@ veri_tipi = st.sidebar.radio(
 
 is_cumul_mode = "Kümülatif" in veri_tipi
 
-# --- KÜMÜLATİF MOD SEÇİLİYSE ---
 if is_cumul_mode:
     uploaded_files_cumul = st.sidebar.file_uploader(
         "Kümülatif Excel Dosyalarını Yükleyin", 
@@ -240,51 +301,33 @@ if is_cumul_mode:
         accept_multiple_files=True,
         key="uploader_cumul_unique"
     )
-    
     if uploaded_files_cumul:
         for u_file in uploaded_files_cumul:
-            f_name_lower = u_file.name.lower()
-            if "monthly" in f_name_lower or "mounthly" in f_name_lower:
-                st.sidebar.error(f"⚠️ '{u_file.name}' bir Aylık dosyasıdır! Lütfen 'Aylık' modunu seçip oraya yükleyin.")
+            if "monthly" in u_file.name.lower():
+                st.sidebar.error(f"⚠️ '{u_file.name}' bir Aylık dosyasıdır!")
                 continue
-                
             yeni_ay_no, yeni_ay_adi = ay_bilgisi_al(u_file.name)
-            mevcut_dosyalar = os.listdir(CUMUL_DIR)
-            ay_cakismasi = any(ay_bilgisi_al(m)[0] == yeni_ay_no for m in mevcut_dosyalar if yeni_ay_no != 99)
-            
-            if ay_cakismasi:
-                st.sidebar.warning(f"⚠️ **{yeni_ay_adi}** ayına ait kümülatif dosya zaten mevcut!")
+            if any(ay_bilgisi_al(m)[0] == yeni_ay_no for m in os.listdir(CUMUL_DIR) if yeni_ay_no != 99):
+                st.sidebar.warning(f"⚠️ **{yeni_ay_adi}** kümülatif dosyası zaten mevcut!")
             else:
-                f_path = os.path.join(CUMUL_DIR, u_file.name)
-                with open(f_path, "wb") as f:
+                with open(os.path.join(CUMUL_DIR, u_file.name), "wb") as f:
                     f.write(u_file.getbuffer())
                 st.sidebar.success(f"✅ Eklendi: {u_file.name}")
 
     saved_files = [os.path.join(CUMUL_DIR, f) for f in os.listdir(CUMUL_DIR) if f.lower().endswith(('.xlsx', '.xls'))]
-    
     if saved_files:
         st.sidebar.markdown("---")
-        st.sidebar.markdown(f"📋 **Kümülatif Yüklü Dosyalar:**")
+        st.sidebar.markdown("📋 **Kümülatif Yüklü Dosyalar:**")
         for f_path in saved_files:
             f_name = os.path.basename(f_path)
             c1, c2 = st.sidebar.columns([4, 1])
             c1.text(f"• {f_name}")
             if c2.button("❌", key=f"del_cumul_{f_name}"):
-                try:
-                    os.remove(f_path)
-                    st.rerun()
-                except Exception:
-                    pass
-        st.sidebar.markdown("")
-        if st.sidebar.button("🗑️ Kümülatif Tümünü Temizle", key="clear_all_cumul"):
-            for f in saved_files:
-                try:
-                    os.remove(f)
-                except Exception:
-                    pass
+                os.remove(f_path)
+                st.rerun()
+        if st.sidebar.button("🗑️ Tümünü Temizle", key="clear_all_cumul"):
+            for f in saved_files: os.remove(f)
             st.rerun()
-
-# --- AYLIK (MONTHLY) MOD SEÇİLİYSE ---
 else:
     uploaded_files_monthly = st.sidebar.file_uploader(
         "Aylık (Monthly) Excel Dosyalarını Yükleyin", 
@@ -292,52 +335,35 @@ else:
         accept_multiple_files=True,
         key="uploader_monthly_unique"
     )
-    
     if uploaded_files_monthly:
         for u_file in uploaded_files_monthly:
-            f_name_lower = u_file.name.lower()
-            if "cumul" in f_name_lower or "kümül" in f_name_lower:
-                st.sidebar.error(f"⚠️ '{u_file.name}' bir Kümülatif dosyasıdır! Lütfen 'Kümülatif' modunu seçip oraya yükleyin.")
+            if "cumul" in u_file.name.lower():
+                st.sidebar.error(f"⚠️ '{u_file.name}' bir Kümülatif dosyasıdır!")
                 continue
-                
             yeni_ay_no, yeni_ay_adi = ay_bilgisi_al(u_file.name)
-            mevcut_dosyalar = os.listdir(MONTHLY_DIR)
-            ay_cakismasi = any(ay_bilgisi_al(m)[0] == yeni_ay_no for m in mevcut_dosyalar if yeni_ay_no != 99)
-            
-            if ay_cakismasi:
-                st.sidebar.warning(f"⚠️ **{yeni_ay_adi}** ayına ait aylık dosya zaten mevcut!")
+            if any(ay_bilgisi_al(m)[0] == yeni_ay_no for m in os.listdir(MONTHLY_DIR) if yeni_ay_no != 99):
+                st.sidebar.warning(f"⚠️ **{yeni_ay_adi}** aylık dosyası zaten mevcut!")
             else:
-                f_path = os.path.join(MONTHLY_DIR, u_file.name)
-                with open(f_path, "wb") as f:
+                with open(os.path.join(MONTHLY_DIR, u_file.name), "wb") as f:
                     f.write(u_file.getbuffer())
                 st.sidebar.success(f"✅ Eklendi: {u_file.name}")
 
     saved_files = [os.path.join(MONTHLY_DIR, f) for f in os.listdir(MONTHLY_DIR) if f.lower().endswith(('.xlsx', '.xls'))]
-    
     if saved_files:
         st.sidebar.markdown("---")
-        st.sidebar.markdown(f"📋 **Aylık Yüklü Dosyalar:**")
+        st.sidebar.markdown("📋 **Aylık Yüklü Dosyalar:**")
         for f_path in saved_files:
             f_name = os.path.basename(f_path)
             c1, c2 = st.sidebar.columns([4, 1])
             c1.text(f"• {f_name}")
             if c2.button("❌", key=f"del_monthly_{f_name}"):
-                try:
-                    os.remove(f_path)
-                    st.rerun()
-                except Exception:
-                    pass
-        st.sidebar.markdown("")
-        if st.sidebar.button("🗑️ Aylık Tümünü Temizle", key="clear_all_monthly"):
-            for f in saved_files:
-                try:
-                    os.remove(f)
-                except Exception:
-                    pass
+                os.remove(f_path)
+                st.rerun()
+        if st.sidebar.button("🗑️ Tümünü Temizle", key="clear_all_monthly"):
+            for f in saved_files: os.remove(f)
             st.rerun()
 
 masse_list, cc_list, fip_list = [], [], []
-
 if saved_files:
     for file_path in saved_files:
         file_name = os.path.basename(file_path)
@@ -345,12 +371,11 @@ if saved_files:
             m = excel_oku(file_path, file_name, 'Masse')
             c = excel_oku(file_path, file_name, 'Cost Center')
             f = excel_oku(file_path, file_name, 'FIP')
-            
             if m is not None and not m.empty: masse_list.append(m)
             if c is not None and not c.empty: cc_list.append(c)
             if f is not None and not f.empty: fip_list.append(f)
-        except Exception as e:
-            st.sidebar.error(f"Hata ({file_name}): {e}")
+        except Exception:
+            pass
 
 # --- ANA EKRAN ---
 if masse_list or cc_list or fip_list:
@@ -360,26 +385,16 @@ if masse_list or cc_list or fip_list:
     piv_c, df_c_all = pivot_tablo_olustur(cc_list, 'Cost_Center')
     piv_f, df_f_all = pivot_tablo_olustur(fip_list, 'Masraf_Kalemi')
 
-    # Sekmeleri dinamik olarak oluştur (Sadece Monthly modunda VTU sekmesi gözüksün)
     if not is_cumul_mode:
         tabs = st.tabs([
-            "📋 Ana Kalemler", 
-            "🏢 Cost Center Özeti", 
-            "📑 Cost Center Detayları", 
-            "🔍 Cost Center FIP Detayı", 
-            "📂 FIP Grup Analizi (3A, 3B vb.)", 
-            "🛠️ Alt Masraf Kalemleri (FIP)",
-            "📊 VTU Özet Analizi"
+            "📋 Ana Kalemler", "🏢 Cost Center Özeti", "📑 Cost Center Detayları", 
+            "🔍 Cost Center FIP Detayı", "📂 FIP Grup Analizi", "🛠️ Alt Masraf Kalemleri", "📊 VTU Özet Analizi"
         ])
         tab1, tab2, tab3, tab4, tab5, tab6, tab_vtu = tabs
     else:
         tabs = st.tabs([
-            "📋 Ana Kalemler", 
-            "🏢 Cost Center Özeti", 
-            "📑 Cost Center Detayları", 
-            "🔍 Cost Center FIP Detayı", 
-            "📂 FIP Grup Analizi (3A, 3B vb.)", 
-            "🛠️ Alt Masraf Kalemleri (FIP)"
+            "📋 Ana Kalemler", "🏢 Cost Center Özeti", "📑 Cost Center Detayları", 
+            "🔍 Cost Center FIP Detayı", "📂 FIP Grup Analizi", "🛠️ Alt Masraf Kalemleri"
         ])
         tab1, tab2, tab3, tab4, tab5, tab6 = tabs
         tab_vtu = None
@@ -388,192 +403,88 @@ if masse_list or cc_list or fip_list:
         if piv_m is not None:
             st.subheader(f"Ana Kalemler Performans Özeti - {veri_tipi} (K€)")
             formatli_tablo_goster(piv_m)
-            
-            if not df_m_all.empty:
-                df_m_chart = df_m_all.sort_values('Ay_Sira')
-                sabit_kalem_sirasi = [k for k in piv_m.index if k != 'TOPLAM']
-                
-                fig_m = px.bar(
-                    df_m_chart, x='Kalem', y='Performance', color='Ay', barmode='group',
-                    title=f"Ana Kalemlerin Aylara Göre Performansı ({veri_tipi})",
-                    template="plotly_white",
-                    category_orders={"Kalem": sabit_kalem_sirasi}
-                )
-                fig_m.update_layout(
-                    height=420,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    font=dict(size=11, color="#333"),
-                    bargap=0.2,
-                    bargroupgap=0.05,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
-                    xaxis=dict(showgrid=False, tickangle=-20),
-                    yaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
-                )
-                st.plotly_chart(fig_m, width="stretch")
 
     with tab2:
         if piv_c is not None:
             st.subheader(f"🏢 Cost Center Yönetici Özeti - {veri_tipi}")
             formatli_tablo_goster(piv_c)
-            st.markdown("---")
-            if not df_c_all.empty:
-                df_c_toplam = df_c_all.groupby('Cost_Center')['Performance'].sum().reset_index()
-                df_c_toplam = df_c_toplam.sort_values('Performance', ascending=True)
-                
-                fig_c = px.bar(
-                    df_c_toplam, x='Performance', y='Cost_Center', orientation='h',
-                    title=f"Cost Center Bazlı Net Performans ({veri_tipi}) (K€)",
-                    template="plotly_white"
-                )
-                fig_c.update_layout(
-                    height=380,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    font=dict(size=11, color="#333"),
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666'),
-                    yaxis=dict(showgrid=False)
-                )
-                st.plotly_chart(fig_c, width="stretch")
 
     with tab3:
         df_c_raw = pd.concat(cc_list, ignore_index=True) if cc_list else pd.DataFrame()
         if not df_c_raw.empty:
             st.subheader("📑 Cost Center Alt Kırılım Detayları")
             unique_cc_summary = sorted(df_c_raw['Cost_Center'].dropna().unique().tolist())
-            selected_cc_summary = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_cc_summary, key="cc_summary_selectbox")
-            
+            selected_cc_summary = st.selectbox("Cost Center Seçin:", unique_cc_summary, key="cc_summary_selectbox")
             if selected_cc_summary:
                 df_cc_filtered = df_c_raw[df_c_raw['Cost_Center'] == selected_cc_summary]
                 aylar_sirali_cc = df_cc_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-                
-                piv_cc_nature = df_cc_filtered.pivot_table(
-                    index='Nature', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
-                )
+                piv_cc_nature = df_cc_filtered.pivot_table(index='Nature', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
                 piv_cc_nature = piv_cc_nature.reindex(columns=[col for col in aylar_sirali_cc if col in piv_cc_nature.columns])
-                piv_cc_nature.columns.name = None
-                piv_cc_nature.index.name = 'Nature'
+                piv_cc_nature.loc['TOPLAM'] = piv_cc_nature.sum()
                 
-                numeric_cols_cc = piv_cc_nature.select_dtypes(include='number').columns
-                piv_cc_nature.loc['TOPLAM'] = 0
-                for col in numeric_cols_cc:
-                    if len(piv_cc_nature) > 1:
-                        piv_cc_nature.loc['TOPLAM', col] = piv_cc_nature.drop('TOPLAM', errors='ignore')[col].sum()
-                
-                ay_listesi_cc = list(piv_cc_nature.columns)
                 t_list, y_list = [], []
                 for _, row in piv_cc_nature.iterrows():
-                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_cc)
+                    tr, yr = trend_ve_yorum_uret(row, list(piv_cc_nature.columns))
                     t_list.append(tr)
                     y_list.append(yr)
                 piv_cc_nature['Sonuç / Trend'] = t_list
                 piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
-                
-                top_row_cc = piv_cc_nature.loc['TOPLAM']
-                t_tr, t_yr = trend_ve_yorum_uret(top_row_cc, ay_listesi_cc)
-                piv_cc_nature.loc['TOPLAM', 'Sonuç / Trend'] = t_tr
-                piv_cc_nature.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Toplam - {t_yr}"
-                    
-                st.markdown(f"**{selected_cc_summary}** Numaralı Merkeze Ait Alt Kalemler (K€)")
                 formatli_tablo_goster(piv_cc_nature)
-        else:
-            st.info("Cost Center detay verisi bulunamadı.")
 
     with tab4:
         df_f_raw = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw.empty:
             st.subheader("🛠️ Cost Center Bazlı Alt Masraf Kalemleri")
             unique_ccs = sorted(df_f_raw['Cost_Center'].dropna().unique().tolist())
-            selected_cc = st.selectbox("İncelemek İstediğiniz Cost Center Numarasını Seçin:", unique_ccs, key="cc_fip_select")
-            
+            selected_cc = st.selectbox("Cost Center Seçin:", unique_ccs, key="cc_fip_select")
             if selected_cc:
                 df_filtered = df_f_raw[df_f_raw['Cost_Center'] == selected_cc]
                 aylar_sirali = df_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-                
-                piv_fip_cc = df_filtered.pivot_table(
-                    index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
-                )
+                piv_fip_cc = df_filtered.pivot_table(index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
                 piv_fip_cc = piv_fip_cc.reindex(columns=[col for col in aylar_sirali if col in piv_fip_cc.columns])
-                piv_fip_cc.columns.name = None
-                piv_fip_cc.index.name = 'Masraf_Kalemi'
+                piv_fip_cc.loc['TOPLAM'] = piv_fip_cc.sum()
                 
-                numeric_cols_fip = piv_fip_cc.select_dtypes(include='number').columns
-                piv_fip_cc.loc['TOPLAM'] = 0
-                for col in numeric_cols_fip:
-                    if len(piv_fip_cc) > 1:
-                        piv_fip_cc.loc['TOPLAM', col] = piv_fip_cc.drop('TOPLAM', errors='ignore')[col].sum()
-                
-                ay_listesi_fip = list(piv_fip_cc.columns)
-                t_fip_list, y_fip_list = [], []
+                t_list, y_list = [], []
                 for _, row in piv_fip_cc.iterrows():
-                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_fip)
-                    t_fip_list.append(tr)
-                    y_fip_list.append(yr)
-                piv_fip_cc['Sonuç / Trend'] = t_fip_list
-                piv_fip_cc['Yönetici Analiz Yorumu'] = y_fip_list
-
-                top_row_fip = piv_fip_cc.loc['TOPLAM']
-                t_tr_f, t_yr_f = trend_ve_yorum_uret(top_row_fip, ay_listesi_fip)
-                piv_fip_cc.loc['TOPLAM', 'Sonuç / Trend'] = t_tr_f
-                piv_fip_cc.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Toplam - {t_yr_f}"
-
-                st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri (K€)")
+                    tr, yr = trend_ve_yorum_uret(row, list(piv_fip_cc.columns))
+                    t_list.append(tr)
+                    y_list.append(yr)
+                piv_fip_cc['Sonuç / Trend'] = t_list
+                piv_fip_cc['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_fip_cc)
-        else:
-            st.info("FIP verisi bulunamadı.")
 
     with tab5:
         df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw_group.empty:
-            st.subheader("📂 FIP Grup Bazlı İnceleme (3A, 3B vb.)")
+            st.subheader("📂 FIP Grup Bazlı İnceleme")
             unique_gruplar = sorted(df_f_raw_group['Grup'].dropna().unique().tolist())
-            selected_grup = st.selectbox("İncelemek İstediğiniz FIP Grubunu Seçin:", unique_gruplar, key="grup_select_tab5")
-            
+            selected_grup = st.selectbox("FIP Grubu Seçin:", unique_gruplar, key="grup_select_tab5")
             if selected_grup:
                 df_grup_filtered = df_f_raw_group[df_f_raw_group['Grup'] == selected_grup]
                 aylar_sirali_grup = df_grup_filtered[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-                
-                piv_grup_detay = df_grup_filtered.pivot_table(
-                    index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0
-                )
+                piv_grup_detay = df_grup_filtered.pivot_table(index='Masraf_Kalemi', columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
                 piv_grup_detay = piv_grup_detay.reindex(columns=[col for col in aylar_sirali_grup if col in piv_grup_detay.columns])
-                piv_grup_detay.columns.name = None
-                piv_grup_detay.index.name = 'Masraf_Kalemi'
+                piv_grup_detay.loc['TOPLAM'] = piv_grup_detay.sum()
                 
-                numeric_cols_gd = piv_grup_detay.select_dtypes(include='number').columns
-                piv_grup_detay.loc['TOPLAM'] = 0
-                for col in numeric_cols_gd:
-                    if len(piv_grup_detay) > 1:
-                        piv_grup_detay.loc['TOPLAM', col] = piv_grup_detay.drop('TOPLAM', errors='ignore')[col].sum()
-
-                ay_listesi_g = list(piv_grup_detay.columns)
-                tg_list, yg_list = [], []
+                t_list, y_list = [], []
                 for _, row in piv_grup_detay.iterrows():
-                    tr, yr = trend_ve_yorum_uret(row, ay_listesi_g)
-                    tg_list.append(tr)
-                    yg_list.append(yr)
-                piv_grup_detay['Sonuç / Trend'] = tg_list
-                piv_grup_detay['Yönetici Analiz Yorumu'] = yg_list
-                
-                top_row_g = piv_grup_detay.loc['TOPLAM']
-                g_tr, g_yr = trend_ve_yorum_uret(top_row_g, ay_listesi_g)
-                piv_grup_detay.loc['TOPLAM', 'Sonuç / Trend'] = g_tr
-                piv_grup_detay.loc['TOPLAM', 'Yönetici Analiz Yorumu'] = f"Grup Toplamı - {g_yr}"
-                    
-                st.markdown(f"**{selected_grup}** Grubuna Ait Detaylar")
+                    tr, yr = trend_ve_yorum_uret(row, list(piv_grup_detay.columns))
+                    t_list.append(tr)
+                    y_list.append(yr)
+                piv_grup_detay['Sonuç / Trend'] = t_list
+                piv_grup_detay['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_grup_detay)
-        else:
-            st.info("FIP grup verisi bulunamadı.")
 
     with tab6:
         if piv_f is not None:
             st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
             formatli_tablo_goster(piv_f)
 
-    # --- VTU ÖZET ANALİZİ SEKMESİ (SADECE MONTHLY MODUNDA GÖZÜKÜR) ---
+    # --- VTU ÖZET ANALİZİ (SADECE MONTHLY MODUNDA) ---
     if tab_vtu is not None:
         with tab_vtu:
-            st.subheader("📊 VTU Sayfası Proje / Hat Bazlı Performans Özetleri")
+            st.subheader("📊 VTU Proje / Hat ve GM17 Detaylı Analizleri")
             
-            # Yüklenen aylık dosyaların VTU bloklarını topla
             tum_vtu_bloklari = {}
             for file_path in saved_files:
                 bloklar = vtu_sayfasini_oku(file_path)
@@ -581,15 +492,27 @@ if masse_list or cc_list or fip_list:
                 
             if tum_vtu_bloklari:
                 secilen_hat = st.selectbox(
-                    "İncelemek İstediğiniz Proje / Hat Numarasını / İsmini Seçin:", 
+                    "İncelemek İstediğiniz Hat / GM17 Projesini Seçin:", 
                     list(tum_vtu_bloklari.keys()),
                     key="vtu_hat_select"
                 )
                 
                 if secilen_hat:
-                    df_vtu_secilen = tum_vtu_bloklari[secilen_hat]
-                    st.markdown(f"**{secilen_hat}** Hattına Ait VTU Detayları (REEL ve BUDGET)")
-                    st.dataframe(df_vtu_secilen, width="stretch", hide_index=True)
+                    st.markdown(f"**{secilen_hat}** Hattına Ait Detaylı Tablo ve Yorumlar")
+                    st.dataframe(tum_vtu_bloklari[secilen_hat], width="stretch", hide_index=True)
+                
+                st.markdown("---")
+                st.subheader("📋 Tüm Hatlar / Projeler Genel Özeti (Toplu Liste)")
+                
+                tum_listeler = []
+                for hat_adi, b_df in tum_vtu_bloklari.items():
+                    b_copy = b_df.copy()
+                    b_copy.insert(0, 'Hat / Proje', hat_adi)
+                    tum_listeler.append(b_copy)
+                    
+                if tum_listeler:
+                    genel_toplu_df = pd.concat(tum_listeler, ignore_index=True)
+                    st.dataframe(genel_toplu_df, width="stretch", hide_index=True)
             else:
                 st.info("Yüklenen aylık dosyalar içinde VTU verisi bulunamadı.")
 
