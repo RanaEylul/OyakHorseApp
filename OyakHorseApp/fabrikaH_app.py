@@ -528,9 +528,9 @@ if masse_list or cc_list or fip_list:
                 piv_cc_nature['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_cc_nature)
             
-            # --- TÜMÜNÜ GÖSTERME TABLOSU (AŞAĞIDA) ---
+            # --- TÜMÜNÜ GÖSTERME TABLOSU (MOD / NATURE DETAYLARIYLA) ---
             st.markdown("---")
-            st.markdown("### 📋 Tüm Cost Center Alt Kırılım Detayları (Genel Görünüm)")
+            st.markdown("### 📋 Tüm Cost Center Alt Kırılımları ve Mod/Nature Detayları (Genel Görünüm)")
             aylar_sirali_all_cc = df_c_raw[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
             piv_all_cc = df_c_raw.pivot_table(index=['Cost_Center', 'Nature'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
             piv_all_cc = piv_all_cc.reindex(columns=[col for col in aylar_sirali_all_cc if col in piv_all_cc.columns])
@@ -545,7 +545,7 @@ if masse_list or cc_list or fip_list:
             if not is_cumul_mode:
                 st.markdown("---")
                 st.subheader("📈 Cost Center Alt Kırılımları Grafiği")
-                fig_all_cc = px.bar(df_c_raw, x='Cost_Center', y='Performance', color='Ay', barmode='group', title="Cost Center Performans Karşılaştırması")
+                fig_all_cc = px.bar(df_c_raw, x='Cost_Center', y='Performance', color='Nature', barmode='group', title="Cost Center ve Nature Bazlı Dağılım")
                 st.plotly_chart(fig_all_cc, use_container_width=True)
 
     with tab4:
@@ -568,11 +568,11 @@ if masse_list or cc_list or fip_list:
                 piv_fip_cc['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_fip_cc)
             
-            # --- TÜMÜNÜ GÖSTERME TABLOSU (AŞAĞIDA) ---
+            # --- TÜMÜNÜ GÖSTERME TABLOSU (MOD / FIP DETAYLARIYLA) ---
             st.markdown("---")
-            st.markdown("### 📋 Tüm Cost Center Bazlı Alt Masraf Kalemleri (Genel Görünüm)")
+            st.markdown("### 📋 Tüm Cost Center Bazlı Masraf Kalemleri ve Mod Detayları (Genel Görünüm)")
             aylar_sirali_all_fip = df_f_raw[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-            piv_all_fip = df_f_raw.pivot_table(index=['Cost_Center', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+            piv_all_fip = df_f_raw.pivot_table(index=['Cost_Center', 'Grup', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
             piv_all_fip = piv_all_fip.reindex(columns=[col for col in aylar_sirali_all_fip if col in piv_all_fip.columns])
             t_fip_all, y_fip_all = [], []
             for _, row in piv_all_fip.iterrows():
@@ -602,11 +602,11 @@ if masse_list or cc_list or fip_list:
                 piv_grup_detay['Yönetici Analiz Yorumu'] = y_list
                 formatli_tablo_goster(piv_grup_detay)
             
-            # --- TÜMÜNÜ GÖSTERME TABLOSU (AŞAĞIDA) ---
+            # --- TÜMÜNÜ GÖSTERME TABLOSU (GRUP VE MOD DETAYLARIYLA) ---
             st.markdown("---")
-            st.markdown("### 📋 Tüm FIP Grup Bazlı Detaylar (Genel Görünüm)")
+            st.markdown("### 📋 Tüm FIP Grup ve Mod Detayları (Genel Görünüm)")
             aylar_sirali_all_grup = df_f_raw_group[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
-            piv_all_grup = df_f_raw_group.pivot_table(index=['Grup', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
+            piv_all_grup = df_f_raw_group.pivot_table(index=['Grup', 'Cost_Center', 'Masraf_Kalemi'], columns='Ay', values='Performance', aggfunc='sum', fill_value=0)
             piv_all_grup = piv_all_grup.reindex(columns=[col for col in aylar_sirali_all_grup if col in piv_all_grup.columns])
             t_g_all, y_g_all = [], []
             for _, row in piv_all_grup.iterrows():
