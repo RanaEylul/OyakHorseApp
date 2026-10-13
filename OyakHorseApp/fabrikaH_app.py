@@ -94,6 +94,33 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
     except Exception:
         return None
 
+def vtu_sayfasini_oku(file_source):
+    try:
+        xl = pd.ExcelFile(file_source)
+        vtu_sheet = None
+        for s in xl.sheet_names:
+            if 'vtu' in s.lower():
+                vtu_sheet = s
+                break
+        if not vtu_sheet:
+            return {}
+            
+        df = pd.read_excel(file_source, sheet_name=vtu_sheet)
+        blocks = {}
+        for col_idx in range(df.shape[1]):
+            val = df.iloc[0, col_idx]
+            if pd.notna(val) and isinstance(val, str) and val.strip() not in ['GM', 'VTU']:
+                block_name = val.strip()
+                sub_df = df.iloc[1:8, col_idx:col_idx+6].copy()
+                sub_df.columns = ['Col0', 'Col1', 'Nature', 'REEL', 'BUDGET', 'Col5']
+                sub_df = sub_df[['Nature', 'REEL', 'BUDGET']].dropna(subset=['Nature'])
+                # Sadece MOD, MOS, FIP, Depreciation ve Grand Total satırlarını al
+                sub_df = sub_df[sub_df['Nature'].astype(str).str.contains('MOD|MOS|FIP|Depreciation|Total', case=False, na=False)]
+                blocks[block_name] = sub_df
+        return blocks
+    except Exception:
+        return {}
+
 def trend_ve_yorum_uret(row, ay_kolonlari):
     if len(ay_kolonlari) < 2:
         return '➔ Takip Edilmeli', "Yetersiz Ay"
@@ -217,14 +244,12 @@ if is_cumul_mode:
     if uploaded_files_cumul:
         for u_file in uploaded_files_cumul:
             f_name_lower = u_file.name.lower()
-            # Yanlışlıkla aylık dosya atılırsa engelle
             if "monthly" in f_name_lower or "mounthly" in f_name_lower:
                 st.sidebar.error(f"⚠️ '{u_file.name}' bir Aylık dosyasıdır! Lütfen 'Aylık' modunu seçip oraya yükleyin.")
                 continue
                 
             yeni_ay_no, yeni_ay_adi = ay_bilgisi_al(u_file.name)
             mevcut_dosyalar = os.listdir(CUMUL_DIR)
-            
             ay_cakismasi = any(ay_bilgisi_al(m)[0] == yeni_ay_no for m in mevcut_dosyalar if yeni_ay_no != 99)
             
             if ay_cakismasi:
@@ -271,14 +296,12 @@ else:
     if uploaded_files_monthly:
         for u_file in uploaded_files_monthly:
             f_name_lower = u_file.name.lower()
-            # Yanlışlıkla kümülatif dosya atılırsa engelle
             if "cumul" in f_name_lower or "kümül" in f_name_lower:
                 st.sidebar.error(f"⚠️ '{u_file.name}' bir Kümülatif dosyasıdır! Lütfen 'Kümülatif' modunu seçip oraya yükleyin.")
                 continue
                 
             yeni_ay_no, yeni_ay_adi = ay_bilgisi_al(u_file.name)
             mevcut_dosyalar = os.listdir(MONTHLY_DIR)
-            
             ay_cakismasi = any(ay_bilgisi_al(m)[0] == yeni_ay_no for m in mevcut_dosyalar if yeni_ay_no != 99)
             
             if ay_cakismasi:
@@ -337,14 +360,29 @@ if masse_list or cc_list or fip_list:
     piv_c, df_c_all = pivot_tablo_olustur(cc_list, 'Cost_Center')
     piv_f, df_f_all = pivot_tablo_olustur(fip_list, 'Masraf_Kalemi')
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📋 Ana Kalemler", 
-        "🏢 Cost Center Özeti", 
-        "📑 Cost Center Detayları", 
-        "🔍 Cost Center FIP Detayı", 
-        "📂 FIP Grup Analizi (3A, 3B vb.)", 
-        "🛠️ Alt Masraf Kalemleri (FIP)"
-    ])
+    # Sekmeleri dinamik olarak oluştur (Sadece Monthly modunda VTU sekmesi gözüksün)
+    if not is_cumul_mode:
+        tabs = st.tabs([
+            "📋 Ana Kalemler", 
+            "🏢 Cost Center Özeti", 
+            "📑 Cost Center Detayları", 
+            "🔍 Cost Center FIP Detayı", 
+            "📂 FIP Grup Analizi (3A, 3B vb.)", 
+            "🛠️ Alt Masraf Kalemleri (FIP)",
+            "📊 VTU Özet Analizi"
+        ])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab_vtu = tabs
+    else:
+        tabs = st.tabs([
+            "📋 Ana Kalemler", 
+            "🏢 Cost Center Özeti", 
+            "📑 Cost Center Detayları", 
+            "🔍 Cost Center FIP Detayı", 
+            "📂 FIP Grup Analizi (3A, 3B vb.)", 
+            "🛠️ Alt Masraf Kalemleri (FIP)"
+        ])
+        tab1, tab2, tab3, tab4, tab5, tab6 = tabs
+        tab_vtu = None
 
     with tab1:
         if piv_m is not None:
@@ -353,7 +391,6 @@ if masse_list or cc_list or fip_list:
             
             if not df_m_all.empty:
                 df_m_chart = df_m_all.sort_values('Ay_Sira')
-                
                 sabit_kalem_sirasi = [k for k in piv_m.index if k != 'TOPLAM']
                 
                 fig_m = px.bar(
@@ -437,21 +474,6 @@ if masse_list or cc_list or fip_list:
                     
                 st.markdown(f"**{selected_cc_summary}** Numaralı Merkeze Ait Alt Kalemler (K€)")
                 formatli_tablo_goster(piv_cc_nature)
-                
-                df_cc_toplam_nature = df_cc_filtered.groupby('Nature')['Performance'].sum().reset_index()
-                fig_cc_nature = px.bar(
-                    df_cc_toplam_nature, x='Performance', y='Nature', orientation='h',
-                    title=f"{selected_cc_summary} - Alt Kalemlerin Net Dağılımı (K€)",
-                    template="plotly_white"
-                )
-                fig_cc_nature.update_layout(
-                    height=350,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    font=dict(size=11, color="#333"),
-                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
-                )
-                st.plotly_chart(fig_cc_nature, width="stretch")
         else:
             st.info("Cost Center detay verisi bulunamadı.")
 
@@ -495,21 +517,6 @@ if masse_list or cc_list or fip_list:
 
                 st.markdown(f"**{selected_cc}** Numaralı Merkeze Ait FIP Kalemleri (K€)")
                 formatli_tablo_goster(piv_fip_cc)
-                
-                df_f_toplam_cc = df_filtered.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
-                fig_f_cc = px.bar(
-                    df_f_toplam_cc, x='Performance', y='Masraf_Kalemi', orientation='h',
-                    title=f"{selected_cc} - FIP Kalemleri Sıralaması (K€)",
-                    template="plotly_white"
-                )
-                fig_f_cc.update_layout(
-                    height=400,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    font=dict(size=11, color="#333"),
-                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
-                )
-                st.plotly_chart(fig_f_cc, width="stretch")
         else:
             st.info("FIP verisi bulunamadı.")
 
@@ -517,7 +524,6 @@ if masse_list or cc_list or fip_list:
         df_f_raw_group = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
         if not df_f_raw_group.empty:
             st.subheader("📂 FIP Grup Bazlı İnceleme (3A, 3B vb.)")
-            
             unique_gruplar = sorted(df_f_raw_group['Grup'].dropna().unique().tolist())
             selected_grup = st.selectbox("İncelemek İstediğiniz FIP Grubunu Seçin:", unique_gruplar, key="grup_select_tab5")
             
@@ -554,21 +560,6 @@ if masse_list or cc_list or fip_list:
                     
                 st.markdown(f"**{selected_grup}** Grubuna Ait Detaylar")
                 formatli_tablo_goster(piv_grup_detay)
-                
-                df_grup_toplam = df_grup_filtered.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
-                fig_grup = px.bar(
-                    df_grup_toplam, x='Performance', y='Masraf_Kalemi', orientation='h',
-                    title=f"{selected_grup} Grubu Kalemleri (K€)",
-                    template="plotly_white"
-                )
-                fig_grup.update_layout(
-                    height=380,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    font=dict(size=11, color="#333"),
-                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
-                )
-                st.plotly_chart(fig_grup, width="stretch")
         else:
             st.info("FIP grup verisi bulunamadı.")
 
@@ -576,22 +567,31 @@ if masse_list or cc_list or fip_list:
         if piv_f is not None:
             st.subheader("Alt Masraf Kalemleri Detaylı Analizi")
             formatli_tablo_goster(piv_f)
-            df_f_chart = pd.concat(fip_list, ignore_index=True) if fip_list else pd.DataFrame()
-            if not df_f_chart.empty:
-                df_f_toplam_all = df_f_chart.groupby('Masraf_Kalemi')['Performance'].sum().reset_index()
-                fig_f = px.bar(
-                    df_f_toplam_all, x='Performance', y='Masraf_Kalemi', orientation='h',
-                    title="Tüm Alt Masraf Kalemleri Genel Dağılımı (K€)",
-                    template="plotly_white"
+
+    # --- VTU ÖZET ANALİZİ SEKMESİ (SADECE MONTHLY MODUNDA GÖZÜKÜR) ---
+    if tab_vtu is not None:
+        with tab_vtu:
+            st.subheader("📊 VTU Sayfası Proje / Hat Bazlı Performans Özetleri")
+            
+            # Yüklenen aylık dosyaların VTU bloklarını topla
+            tum_vtu_bloklari = {}
+            for file_path in saved_files:
+                bloklar = vtu_sayfasini_oku(file_path)
+                tum_vtu_bloklari.update(bloklar)
+                
+            if tum_vtu_bloklari:
+                secilen_hat = st.selectbox(
+                    "İncelemek İstediğiniz Proje / Hat Numarasını / İsmini Seçin:", 
+                    list(tum_vtu_bloklari.keys()),
+                    key="vtu_hat_select"
                 )
-                fig_f.update_layout(
-                    height=420,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    font=dict(size=11, color="#333"),
-                    yaxis={'categoryorder':'total ascending', 'showgrid': False},
-                    xaxis=dict(showgrid=True, gridcolor='#f2f2f2', zeroline=True, zerolinewidth=1.5, zerolinecolor='#666')
-                )
-                st.plotly_chart(fig_f, width="stretch")
+                
+                if secilen_hat:
+                    df_vtu_secilen = tum_vtu_bloklari[secilen_hat]
+                    st.markdown(f"**{secilen_hat}** Hattına Ait VTU Detayları (REEL ve BUDGET)")
+                    st.dataframe(df_vtu_secilen, width="stretch", hide_index=True)
+            else:
+                st.info("Yüklenen aylık dosyalar içinde VTU verisi bulunamadı.")
 
 else:
     st.info(f"💡 `{veri_tipi}` modunda analiz tablolarının oluşması için sol panelden ilgili Excel dosyalarınızı yükleyin.")
