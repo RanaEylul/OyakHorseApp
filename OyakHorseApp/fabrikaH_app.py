@@ -96,10 +96,11 @@ def excel_oku(file_source, dosya_adi, sheet_type='Masse'):
 
 def loupes_sayfasini_oku_tum_aylar(saved_files_list):
     loupes_list = []
+    # Doğru bütçe ve reel indeks eşleştirmeleri: B4D (5, 6), HR16 (10, 11), HR18 (15, 16)
     proje_sutunlari = [
-        ("B4D", 3, 4, 5),
-        ("HR16", 9, 10, 11),
-        ("HR18", 14, 15, 16)
+        ("B4D", 5, 6),
+        ("HR16", 10, 11),
+        ("HR18", 15, 16)
     ]
     
     for f_path in saved_files_list:
@@ -116,7 +117,7 @@ def loupes_sayfasini_oku_tum_aylar(saved_files_list):
                 continue
                 
             df = pd.read_excel(f_path, sheet_name=loupes_sheet)
-            for proje, col_isim, col_bud, col_reel in proje_sutunlari:
+            for proje, col_bud, col_reel in proje_sutunlari:
                 try:
                     bud_val = pd.to_numeric(df.iloc[3, col_bud], errors='coerce') or 0.0
                     reel_val = pd.to_numeric(df.iloc[3, col_reel], errors='coerce') or 0.0
@@ -133,7 +134,7 @@ def loupes_sayfasini_oku_tum_aylar(saved_files_list):
             continue
             
     if not loupes_list:
-        return pd.DataFrame()
+        return pd.DataFrame(), []
         
     df_l_all = pd.DataFrame(loupes_list)
     aylar_sirali = df_l_all[['Ay', 'Ay_Sira']].drop_duplicates().sort_values('Ay_Sira')['Ay'].tolist()
@@ -602,7 +603,7 @@ if masse_list or cc_list or fip_list:
             else:
                 st.info("Yüklenen aylık dosyalar içinde VTU verisi bulunamadı.")
 
-    # --- LOUPES ANALİZİ (Çoklu Ay Karşılaştırma, B4D Dahil & Yönetici Yorumları) ---
+    # --- LOUPES ANALİZİ ---
     if tab_loupes is not None:
         with tab_loupes:
             st.subheader("🔍 Loupes Sayfası Çoklu Ay Karşılaştırma ve Proje Özeti (B4D, HR16, HR18)")
